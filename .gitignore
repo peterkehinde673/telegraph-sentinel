@@ -1,0 +1,24 @@
+# Environment secrets (NEVER commit private keys or API tokens)
+.env
+.env.local
+.env.*.local
+
+# Databases & logs
+*.db
+sentinel.db
+logs/
+*.log
+
+# Dependencies
+node_modules/
+backend/node/node_modules/
+frontend/node_modules/
+venv/
+__pycache__/
+*.pyc
+
+# Build outputs & caches
+backend/node/dist/
+frontend/dist/
+.pytest_cache/
+.coverage

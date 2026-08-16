@@ -1,0 +1,42 @@
+{
+  "_NOTICE": "DEVELOPMENT ONLY — NOT REAL TELEGRAPH DATA",
+  "asset": "ETH",
+  "signals": [
+    {
+      "miner_id": 207,
+      "miner_name": "CoinGecko",
+      "intent": "CRYPTO_PRICE",
+      "status": "success",
+      "timestamp": "2026-08-16T00:00:00.000Z",
+      "risk_signal": 22.5,
+      "confidence": 92.0,
+      "data": { "price_usd": 3450.25, "24h_change": "+2.4%", "volatility_score": "low" },
+      "verification": { "proof": "0x7a8f9b...dev_fixture", "network": "eip155:84532" },
+      "payment": { "receipt": "0xrcpt_fixture_207" }
+    },
+    {
+      "miner_id": 301,
+      "miner_name": "TVL Oracle",
+      "intent": "TVL_LOOKUP",
+      "status": "success",
+      "timestamp": "2026-08-16T00:00:00.000Z",
+      "risk_signal": 18.0,
+      "confidence": 95.0,
+      "data": { "tvl_usd": 58200000000, "7d_tvl_delta": "+3.1%", "protocol_risk": "minimal" },
+      "verification": { "proof": "0x3c2e1a...dev_fixture", "network": "eip155:84532" },
+      "payment": { "receipt": "0xrcpt_fixture_301" }
+    },
+    {
+      "miner_id": 202,
+      "miner_name": "Tavily",
+      "intent": "WEB_SEARCH",
+      "status": "success",
+      "timestamp": "2026-08-16T00:00:00.000Z",
+      "risk_signal": 15.0,
+      "confidence": 88.0,
+      "data": { "sentiment": "positive", "critical_security_breaches_found": 0, "articles_analyzed": 18 },
+      "verification": { "proof": "0x9d4e5f...dev_fixture", "network": "eip155:84532" },
+      "payment": { "receipt": "0xrcpt_fixture_202" }
+    }
+  ]
+}

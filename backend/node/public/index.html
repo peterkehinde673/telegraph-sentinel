@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Telegraph Sentinel — Verified Autonomous Risk Intelligence</title>
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #080b10;
+      color: #e6edf3;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace, sans-serif;
+      -webkit-font-smoothing: antialiased;
+    }
+    input, select, button { font-family: inherit; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    function App() {
+      const [asset, setAsset] = useState('ETH');
+      const [actionType, setActionType] = useState('GENERAL_ANALYSIS');
+      const [useFixture, setUseFixture] = useState(false);
+      const [loading, setLoading] = useState(false);
+      const [result, setResult] = useState(null);
+      const [history, setHistory] = useState([]);
+      const [watchRules, setWatchRules] = useState([]);
+      const [activeTab, setActiveTab] = useState('ANALYZE');
+      const [wsStatus, setWsStatus] = useState('CONNECTING');
+      const [alertBanner, setAlertBanner] = useState(null);
+      const [wsEvents, setWsEvents] = useState([]);
+
+      useEffect(() => {
+        fetchRecentAnalyses();
+        fetchWatchRules();
+
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const ws = new WebSocket(`${wsProtocol}//${window.location.host}`);
+
+        ws.onopen = () => {
+          setWsStatus('CONNECTED');
+          addWsLog('WebSocket connection established.');
+        };
+        ws.onclose = () => {
+          setWsStatus('DISCONNECTED');
+          addWsLog('WebSocket connection closed.');
+        };
+        ws.onmessage = (event) => {
+          try {
+            const msg = JSON.parse(event.data);
+            addWsLog(`Event: ${msg.type}`);
+            if (msg.type === 'ANALYSIS_COMPLETED') {
+              fetchRecentAnalyses();
+            } else if (msg.type === 'WATCH_ALERT') {
+              setAlertBanner(`🚨 Sentinel Watch Alert on ${msg.data.asset}: ${msg.data.trigger_reason}`);
+            }
+          } catch (e) {
+            console.error(e);
+          }
+        };
+
+        return () => ws.close();
+      }, []);
+
+      const addWsLog = (text) => {
+        setWsEvents(prev => [{ text, time: new Date().toLocaleTimeString() }, ...prev.slice(0, 15)]);
+      };
+
+      const fetchRecentAnalyses = async () => {
+        try {
+          const res = await fetch('/api/analyses');
+          const data = await res.json();
+          if (data.analyses) setHistory(data.analyses);
+        } catch (e) {
+          console.warn(e);
+        }
+      };
+
+      const fetchWatchRules = async () => {
+        try {
+          const res = await fetch('/api/watch');
+          const data = await res.json();
+          if (data.rules) setWatchRules(data.rules);
+        } catch (e) {
+          console.warn(e);
+        }
+      };
+
+      const runAnalysis = async () => {
+        setLoading(true);
+        setAlertBanner(null);
+        try {
+          const res = await fetch(`/api/analyze?mode=${useFixture ? 'fixture' : 'live'}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ asset, action_type: actionType }),
+          });
+          const data = await res.json();
+          setResult(data);
+          fetchRecentAnalyses();
+        } catch (e) {
+          alert('Analysis request failed: ' + e.message);
+        } finally {
+          setLoading(false);
+        }
+      };
+
+      const addWatch = async () => {
+        try {
+          await fetch('/api/watch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ asset, riskThreshold: 60, confidenceThreshold: 85 }),
+          });
+          fetchWatchRules();
+          alert(`Monitoring rule saved for ${asset}`);
+        } catch (e) {
+          alert(e.message);
+        }
+      };
+
+      const getDecisionColor = (decision) => {
+        switch (decision) {
+          case 'APPROVE': return '#2ea043';
+          case 'REVIEW': return '#d29922';
+          case 'HIGH_RISK_REVIEW': return '#db6d28';
+          case 'BLOCK': return '#f85149';
+          default: return '#8b949e';
+        }
+      };
+
+      return (
+        <div style={{ maxWidth: '1050px', margin: '0 auto', padding: '24px 16px' }}>
+          {/* Header */}
+          <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #21262d', paddingBottom: '16px', marginBottom: '20px' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <h1 style={{ fontSize: '22px', fontWeight: '800', letterSpacing: '-0.5px' }}>TELEGRAPH SENTINEL</h1>
+                <span style={{ fontSize: '10px', background: '#1f6feb22', border: '1px solid #1f6feb', color: '#58a6ff', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>EVM: BASE SEPOLIA</span>
+              </div>
+              <p style={{ color: '#8b949e', fontSize: '13px', marginTop: '4px' }}>Verified intelligence before every critical crypto decision</p>
+            </div>
+            <div style={{ textAlign: 'right' }}>
+              <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: wsStatus === 'CONNECTED' ? '#2ea043' : '#f85149', marginRight: '6px' }}></span>
+              <span style={{ fontSize: '12px', color: '#8b949e' }}>WS: {wsStatus}</span>
+            </div>
+          </header>
+
+          {/* Alert Banner */}
+          {alertBanner && (
+            <div style={{ background: 'rgba(248, 81, 73, 0.15)', border: '1px solid #f85149', color: '#ff7b72', padding: '12px', borderRadius: '6px', marginBottom: '16px', fontSize: '13px' }}>
+              {alertBanner}
+            </div>
+          )}
+
+          {/* Navigation */}
+          <nav style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
+            {['ANALYZE', 'WATCH', 'HISTORY', 'WS EVENTS'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: activeTab === tab ? '#161b22' : 'transparent',
+                  color: activeTab === tab ? '#58a6ff' : '#8b949e',
+                  border: '1px solid',
+                  borderColor: activeTab === tab ? '#388bfd' : '#21262d',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                  fontSize: '13px'
+                }}
+              >
+                {tab}
+              </button>
+            ))}
+          </nav>
+
+          {activeTab === 'ANALYZE' && (
+            <div>
+              {/* Input Card */}
+              <div style={{ background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '18px', marginBottom: '20px' }}>
+                <div style={{ display: 'flex', gap: '6px', marginBottom: '14px' }}>
+                  <span style={{ fontSize: '11px', color: '#8b949e', alignSelf: 'center', marginRight: '6px' }}>PRESETS:</span>
+                  {['ETH', 'AAVE', 'SOL', 'UNI'].map(sym => (
+                    <button
+                      key={sym}
+                      onClick={() => setAsset(sym)}
+                      style={{
+                        padding: '4px 10px',
+                        background: asset === sym ? '#238636' : '#21262d',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontSize: '11px',
+                        fontWeight: 600
+                      }}
+                    >
+                      {sym}
+                    </button>
+                  ))}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px', marginBottom: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: '#8b949e', marginBottom: '6px', textTransform: 'uppercase' }}>Target Asset / Protocol</label>
+                    <input
+                      type="text"
+                      value={asset}
+                      onChange={(e) => setAsset(e.target.value.toUpperCase())}
+                      style={{ width: '100%', padding: '10px', background: '#161b22', border: '1px solid #30363d', color: '#fff', borderRadius: '6px', fontWeight: 'bold' }}
+                      placeholder="e.g. ETH, AAVE, SOL"
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: '#8b949e', marginBottom: '6px', textTransform: 'uppercase' }}>Proposed Action</label>
+                    <select
+                      value={actionType}
+                      onChange={(e) => setActionType(e.target.value)}
+                      style={{ width: '100%', padding: '10px', background: '#161b22', border: '1px solid #30363d', color: '#fff', borderRadius: '6px' }}
+                    >
+                      <option value="GENERAL_ANALYSIS">General Risk Assessment</option>
+                      <option value="BUY_ENTER">Buy / Enter Position</option>
+                      <option value="DEFI_ACTION">DeFi Interaction / Smart Contract</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: '#8b949e', marginBottom: '6px', textTransform: 'uppercase' }}>Execution Mode</label>
+                    <button
+                      type="button"
+                      onClick={() => setUseFixture(!useFixture)}
+                      style={{
+                        width: '100%',
+                        padding: '10px',
+                        background: useFixture ? '#388bfd22' : '#161b22',
+                        border: `1px solid ${useFixture ? '#58a6ff' : '#30363d'}`,
+                        color: useFixture ? '#58a6ff' : '#8b949e',
+                        borderRadius: '6px',
+                        cursor: 'pointer',
+                        fontSize: '12px'
+                      }}
+                    >
+                      {useFixture ? '● Mode: Dev Fixture' : '○ Mode: Live Miners'}
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <button
+                    onClick={runAnalysis}
+                    disabled={loading}
+                    style={{
+                      flex: 1,
+                      padding: '12px',
+                      background: '#238636',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 'bold',
+                      cursor: loading ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {loading ? 'QUERYING TELEGRAPH MINERS...' : 'RUN SENTINEL ANALYSIS'}
+                  </button>
+
+                  <button
+                    onClick={addWatch}
+                    style={{
+                      padding: '12px 16px',
+                      background: '#21262d',
+                      color: '#c9d1d9',
+                      border: '1px solid #30363d',
+                      borderRadius: '6px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      fontSize: '13px'
+                    }}
+                  >
+                    + Add to Watch
+                  </button>
+                </div>
+              </div>
+
+              {/* Result Visual Hierarchy: DECISION -> RISK -> CONFIDENCE */}
+              {result && (
+                <div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '20px' }}>
+                    <div style={{ background: '#0d1117', border: `2px solid ${getDecisionColor(result.decision)}`, borderRadius: '8px', padding: '16px', textAlign: 'center' }}>
+                      <div style={{ fontSize: '11px', color: '#8b949e' }}>SENTINEL DECISION</div>
+                      <div style={{ fontSize: '24px', fontWeight: '800', color: getDecisionColor(result.decision), marginTop: '4px' }}>{result.decision}</div>
+                    </div>
+
+                    <div style={{ background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#8b949e', marginBottom: '6px' }}>
+                        <span>COMPOSITE RISK</span>
+                        <strong style={{ color: '#fff' }}>{result.risk_score}/100</strong>
+                      </div>
+                      <div style={{ height: '8px', background: '#21262d', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${result.risk_score}%`, background: getDecisionColor(result.decision), transition: 'width 0.4s' }}></div>
+                      </div>
+                    </div>
+
+                    <div style={{ background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '16px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px', color: '#8b949e', marginBottom: '6px' }}>
+                        <span>CONFIDENCE</span>
+                        <strong style={{ color: '#58a6ff' }}>{result.confidence_score}%</strong>
+                      </div>
+                      <div style={{ height: '8px', background: '#21262d', borderRadius: '4px', overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${result.confidence_score}%`, background: '#58a6ff', transition: 'width 0.4s' }}></div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Signals */}
+                  <h3 style={{ fontSize: '14px', marginBottom: '10px', letterSpacing: '0.5px' }}>TELEGRAPH MINER SIGNALS</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+                    {result.signals.map((sig, idx) => (
+                      <div key={idx} style={{ background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '14px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                          <strong style={{ fontSize: '14px' }}>{sig.miner_name}</strong>
+                          <span style={{ fontSize: '10px', background: '#161b22', border: '1px solid #30363d', padding: '2px 6px', borderRadius: '4px', color: '#8b949e' }}>ID {sig.miner_id}</span>
+                        </div>
+                        <div style={{ fontSize: '11px', color: '#8b949e', marginBottom: '10px' }}>{sig.intent}</div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
+                          <span>Status:</span>
+                          <strong style={{ color: sig.status === 'success' ? '#2ea043' : '#f85149' }}>{sig.status.toUpperCase()}</strong>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                          <span>Risk / Conf:</span>
+                          <span>{sig.risk_signal} / {sig.confidence}%</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Evidence & Verification */}
+                  <div style={{ background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '16px' }}>
+                    <h3 style={{ fontSize: '14px', marginBottom: '10px' }}>EVIDENCE & RISK BREAKDOWN</h3>
+                    <ul style={{ listStyle: 'none', padding: 0 }}>
+                      {result.evidence.map((e, idx) => (
+                        <li key={idx} style={{ padding: '8px 0', borderBottom: '1px solid #161b22', fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                          <span>• [{e.category}] {e.summary}</span>
+                          <span style={{ color: '#8b949e' }}>+{e.risk_contribution} pts</span>
+                        </li>
+                      ))}
+                    </ul>
+
+                    <h4 style={{ fontSize: '12px', color: '#58a6ff', marginTop: '14px', marginBottom: '6px' }}>TELEGRAPH PROTOCOL VERIFICATION & RECEIPTS</h4>
+                    <pre style={{ background: '#161b22', padding: '10px', borderRadius: '6px', fontSize: '11px', color: '#7ee787', overflowX: 'auto' }}>
+                      {JSON.stringify(result.verification_metadata, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'WATCH' && (
+            <div style={{ background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '16px' }}>
+              <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>SENTINEL WATCH ACTIVE RULES</h3>
+              {watchRules.length === 0 ? (
+                <p style={{ color: '#8b949e', fontSize: '12px' }}>No active monitoring rules.</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {watchRules.map(r => (
+                    <div key={r.id} style={{ background: '#161b22', border: '1px solid #30363d', padding: '12px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <strong>{r.asset}</strong>
+                        <div style={{ fontSize: '11px', color: '#8b949e', marginTop: '2px' }}>
+                          Alert if Risk ≥ {r.riskThreshold} OR Confidence &lt; {r.confidenceThreshold}%
+                        </div>
+                      </div>
+                      <span style={{ fontSize: '10px', background: '#23863622', color: '#3fb950', padding: '2px 6px', borderRadius: '4px' }}>{r.status}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'HISTORY' && (
+            <div style={{ background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '16px' }}>
+              <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>PERSISTENT SQLite AUDIT TRAIL</h3>
+              {history.length === 0 ? (
+                <p style={{ color: '#8b949e', fontSize: '12px' }}>No historical analyses recorded yet.</p>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: '1px solid #30363d', textAlign: 'left', color: '#8b949e' }}>
+                      <th style={{ padding: '6px' }}>Asset</th>
+                      <th style={{ padding: '6px' }}>Decision</th>
+                      <th style={{ padding: '6px' }}>Risk</th>
+                      <th style={{ padding: '6px' }}>Confidence</th>
+                      <th style={{ padding: '6px' }}>Timestamp</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {history.map(h => (
+                      <tr key={h.analysis_id} style={{ borderBottom: '1px solid #161b22' }}>
+                        <td style={{ padding: '6px', fontWeight: 'bold' }}>{h.asset}</td>
+                        <td style={{ padding: '6px', color: getDecisionColor(h.decision), fontWeight: 'bold' }}>{h.decision}</td>
+                        <td style={{ padding: '6px' }}>{h.risk_score}</td>
+                        <td style={{ padding: '6px' }}>{h.confidence_score}%</td>
+                        <td style={{ padding: '6px', color: '#8b949e' }}>{new Date(h.created_at).toLocaleTimeString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'WS EVENTS' && (
+            <div style={{ background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '16px' }}>
+              <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>LIVE WEBSOCKET STREAM</h3>
+              <div style={{ background: '#161b22', padding: '12px', borderRadius: '6px', maxHeight: '250px', overflowY: 'auto' }}>
+                {wsEvents.map((evt, i) => (
+                  <div key={i} style={{ fontSize: '11px', color: '#7ee787', padding: '3px 0', borderBottom: '1px solid #21262d' }}>
+                    <span style={{ color: '#8b949e', marginRight: '8px' }}>[{evt.time}]</span>
+                    {evt.text}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
