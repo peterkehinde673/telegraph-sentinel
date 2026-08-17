@@ -21,13 +21,12 @@ export class X402Signer {
   private network: string;
 
   constructor() {
-    this.network = config.telegraph.network; // eip155:84532 (Base Sepolia)
+    this.network = config.telegraph.network;
   }
 
   public isWalletConfigured(): boolean {
     const key = config.x402.walletPrivateKey?.trim();
     if (!key) return false;
-    // Must be valid 32-byte hex string (with or without 0x prefix)
     const sanitized = key.startsWith('0x') ? key.slice(2) : key;
     return sanitized.length === 64 && /^[0-9a-fA-F]+$/.test(sanitized);
   }
@@ -52,10 +51,7 @@ export class X402Signer {
       const payTo = challenge.payTo || ethers.ZeroAddress;
       const maxAmount = challenge.maxAmountRequired || '1000';
 
-      // Construct canonical challenge message to sign
       const messageToSign = `x402:pay:${this.network}:${facilitator}:${payTo}:${maxAmount}:${timestamp}`;
-
-      // Cryptographic ECDSA signature (secp256k1)
       const signature = await wallet.signMessage(messageToSign);
 
       const authPayload = {

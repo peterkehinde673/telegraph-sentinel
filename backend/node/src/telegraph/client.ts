@@ -74,7 +74,6 @@ export class TelegraphClient {
     }
 
     try {
-      // 1. Initial Request
       const response = await this.http.get(minerReq.endpoint, {
         params: minerReq.params,
       });
@@ -101,7 +100,6 @@ export class TelegraphClient {
         },
       };
     } catch (error: any) {
-      // 2. Handle x402 Challenge
       if (error.response?.status === 402) {
         if (!x402Signer.isWalletConfigured()) {
           return {
@@ -138,7 +136,6 @@ export class TelegraphClient {
         }
 
         try {
-          // Re-submit with authentic cryptographic signature headers
           const retryResponse = await this.http.get(minerReq.endpoint, {
             params: minerReq.params,
             headers: paymentAuth.headers,
@@ -146,8 +143,6 @@ export class TelegraphClient {
 
           const proofHeader = retryResponse.headers['x-telegraph-proof'];
           const receiptHeader = retryResponse.headers['x-payment-receipt'];
-
-          // Strictly require real receipt header from the facilitator
           const isSettled = Boolean(receiptHeader && receiptHeader.trim().length > 0);
 
           return {
