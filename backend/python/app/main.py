@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
-from app.database import get_analysis_by_id, init_db, list_recent_analyses, save_analysis
+from app.database import delete_watch_rule_db, get_all_watch_rules, init_db, list_recent_analyses, save_analysis, save_watch_rule
 from app.engine import evaluate_risk
 from app.models import AnalyzeRequest, AnalyzeResponse, HealthResponse
 
@@ -14,12 +14,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(
-    title="Telegraph Sentinel Risk Engine",
-    version="0.1.0",
-    description="Deterministic crypto intelligence and risk engine consuming Telegraph Miner signals",
-    lifespan=lifespan,
-)
+app = FastAPI(title="Telegraph Sentinel Risk Engine", version="0.2.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -35,37 +30,20 @@ async def health_check():
     return HealthResponse(
         status="healthy",
         service="sentinel-python-risk-engine",
-        version="0.1.0",
+        version="0.2.0",
         timestamp=datetime.now(timezone.utc).isoformat(),
-        weights={
-            "market": settings.weight_market,
-            "tvl": settings.weight_tvl,
-            "news": settings.weight_news,
-        },
-        thresholds={
-            "approve": settings.threshold_approve,
-            "review": settings.threshold_review,
-            "block": settings.threshold_block,
-        },
+        weights={"market": settings.weight_market, "tvl": settings.weight_tvl, "news": settings.weight_news},
+        thresholds={"approve": settings.threshold_approve, "review": settings.threshold_review, "block": settings.threshold_block},
     )
 
 
-@app.post("/analyze", response_model=AnalyzeResponse, status_code=status.HTTP_200_OK)
+@app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_endpoint(request: AnalyzeRequest):
     if not request.asset.strip():
-        raise HTTPException(status_code=400, detail="Asset identifier cannot be empty")
-
+        raise HTTPException(status_code=400, detail="Asset cannot be empty")
     result = evaluate_risk(request)
     save_analysis(result)
     return result
-
-
-@app.get("/analysis/{analysis_id}", response_model=AnalyzeResponse)
-async def get_analysis_endpoint(analysis_id: str):
-    record = get_analysis_by_id(analysis_id)
-    if not record:
-        raise HTTPException(status_code=404, detail="Analysis record not found")
-    return record
 
 
 @app.get("/analyses")
@@ -73,6 +51,20 @@ async def list_analyses_endpoint():
     return {"analyses": list_recent_analyses(limit=25)}
 
 
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=False)
+@app.get("/watch-rules")
+async def get_watch_rules_endpoint():
+    return {"rules": get_all_watch_rules()}
+
+
+@app.post("/watch-rules")
+async def save_watch_rule_endpoint(rule: dict):
+    save_watch_rule(rule)
+    return {"status": "saved", "rule": rule}
+
+
+@app.delete("/watch-rules/{rule_id}")
+async def delete_watch_rule_endpoint(rule_id: str):
+    success = delete_watch_rule_db(rule_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    return {"status": "deleted", "rule_id": rule_id}

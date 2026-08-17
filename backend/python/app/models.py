@@ -12,6 +12,12 @@ class DecisionEnum(str, Enum):
     INSUFFICIENT_DATA = "INSUFFICIENT_DATA"
 
 
+class OperatingModeEnum(str, Enum):
+    ANALYZE = "ANALYZE"
+    PROTECT = "PROTECT"
+    AUTOPILOT = "AUTOPILOT"
+
+
 class SignalTypeEnum(str, Enum):
     CRYPTO_PRICE = "CRYPTO_PRICE"
     TVL_LOOKUP = "TVL_LOOKUP"
@@ -40,6 +46,7 @@ class RawSignalInput(BaseModel):
 
 class AnalyzeRequest(BaseModel):
     asset: str
+    mode: OperatingModeEnum = OperatingModeEnum.ANALYZE
     action_type: str = "GENERAL_ANALYSIS"
     signals: List[RawSignalInput] = Field(default_factory=list)
 
@@ -55,10 +62,12 @@ class EvidenceItem(BaseModel):
 class AnalyzeResponse(BaseModel):
     analysis_id: str
     asset: str
+    mode: OperatingModeEnum
     action_type: str
     risk_score: float
     confidence_score: float
     decision: DecisionEnum
+    reason_codes: List[str]
     created_at: str
     signals: List[RawSignalInput]
     evidence: List[EvidenceItem]

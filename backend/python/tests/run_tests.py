@@ -2,7 +2,6 @@ import sys
 import os
 import asyncio
 
-# Ensure backend/python is on sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from httpx import ASGITransport, AsyncClient
@@ -22,10 +21,11 @@ async def run_all_tests():
         assert data["status"] == "healthy"
         print(f"   ✓ Health check OK: {data['service']}")
 
-        # Test 2: Analyze
-        print("2. Testing POST /analyze...")
+        # Test 2: Analyze Endpoint (ANALYZE mode)
+        print("2. Testing POST /analyze (ANALYZE mode)...")
         payload = {
             "asset": "ETH",
+            "mode": "ANALYZE",
             "action_type": "BUY",
             "signals": [
                 {
@@ -44,7 +44,30 @@ async def run_all_tests():
         assert res.status_code == 200, f"Expected 200, got {res.status_code}"
         data = res.json()
         assert data["decision"] == DecisionEnum.APPROVE.value
+        assert "mode" in data and data["mode"] == "ANALYZE"
+        assert "reason_codes" in data
         print(f"   ✓ Deterministic calculation OK: Decision={data['decision']}, Risk={data['risk_score']}")
+
+        # Test 3: Watch Rules SQLite Persistence
+        print("3. Testing POST & GET /watch-rules...")
+        rule_payload = {
+            "rule_id": "test_rule_1",
+            "asset": "ETH",
+            "mode": "AUTOPILOT",
+            "risk_threshold": 60.0,
+            "confidence_threshold": 85.0,
+            "interval_minutes": 15,
+            "status": "ACTIVE",
+            "created_at": "2026-08-17T00:00:00Z"
+        }
+        save_res = await client.post("/watch-rules", json=rule_payload)
+        assert save_res.status_code == 200
+        
+        get_res = await client.get("/watch-rules")
+        assert get_res.status_code == 200
+        rules = get_res.json().get("rules", [])
+        assert len(rules) >= 1
+        print("   ✓ SQLite Watch rules persisted and retrieved cleanly.")
 
     print("--- All Python Engine Tests Passed! ---\n")
 
