@@ -19,8 +19,9 @@ export interface TelegraphVerificationMeta {
 
 export interface TelegraphPaymentMeta {
   settled: boolean;
-  status: 'SETTLED' | 'PAYMENT_REQUIRED' | 'PAYMENT_NOT_CONFIGURED' | 'PAYMENT_FAILED' | 'UNVERIFIED' | 'NOT_REQUIRED';
+  status: 'NOT_CONFIGURED' | 'PAYMENT_REQUIRED' | 'PAYMENT_AUTHORIZED' | 'PAYMENT_SUBMITTED' | 'SETTLED' | 'PAYMENT_FAILED' | 'UNVERIFIED' | 'NOT_REQUIRED';
   receipt?: string;
+  signerAddress?: string;
   network?: string;
   error?: string;
 }
@@ -67,13 +68,13 @@ export class TelegraphClient {
         },
         payment: {
           settled: false,
-          status: 'NOT_REQUIRED',
+          status: 'NOT_CONFIGURED',
         },
       };
     }
 
     try {
-      // 1. Standard Request
+      // 1. Initial Request
       const response = await this.http.get(minerReq.endpoint, {
         params: minerReq.params,
       });
@@ -86,14 +87,14 @@ export class TelegraphClient {
         status: 'SUCCESS',
         data: response.data,
         verification: {
-          verified: Boolean(proofHeader),
+          verified: Boolean(proofHeader && proofHeader.trim().length > 0),
           status: proofHeader ? 'TELEGRAPH_VERIFIED' : 'UNVERIFIED',
           proof: proofHeader || undefined,
           minerId: minerReq.minerId,
           network: config.telegraph.network,
         },
         payment: {
-          settled: Boolean(receiptHeader),
+          settled: Boolean(receiptHeader && receiptHeader.trim().length > 0),
           status: receiptHeader ? 'SETTLED' : 'NOT_REQUIRED',
           receipt: receiptHeader || undefined,
           network: config.telegraph.network,
@@ -114,19 +115,19 @@ export class TelegraphClient {
             },
             payment: {
               settled: false,
-              status: 'PAYMENT_NOT_CONFIGURED',
+              status: 'NOT_CONFIGURED',
               network: config.telegraph.network,
-              error: 'Missing wallet signing credentials in .env',
+              error: 'Missing or invalid 32-byte WALLET_PRIVATE_KEY in .env',
             },
           };
         }
 
-        const paymentAuth = x402Signer.preparePaymentHeader({
+        const paymentAuth = await x402Signer.preparePaymentHeader({
           facilitatorUrl: config.x402.facilitatorUrl,
           network: config.telegraph.network,
         });
 
-        if (paymentAuth.status !== 'PAYMENT_SIGNED') {
+        if (paymentAuth.status !== 'PAYMENT_AUTHORIZED') {
           return {
             success: false,
             status: 'FAILED',
@@ -137,6 +138,7 @@ export class TelegraphClient {
         }
 
         try {
+          // Re-submit with authentic cryptographic signature headers
           const retryResponse = await this.http.get(minerReq.endpoint, {
             params: minerReq.params,
             headers: paymentAuth.headers,
@@ -153,7 +155,7 @@ export class TelegraphClient {
             status: 'SUCCESS',
             data: retryResponse.data,
             verification: {
-              verified: Boolean(proofHeader),
+              verified: Boolean(proofHeader && proofHeader.trim().length > 0),
               status: proofHeader ? 'TELEGRAPH_VERIFIED' : 'UNVERIFIED',
               proof: proofHeader || undefined,
               minerId: minerReq.minerId,
@@ -163,6 +165,7 @@ export class TelegraphClient {
               settled: isSettled,
               status: isSettled ? 'SETTLED' : 'UNVERIFIED',
               receipt: receiptHeader || undefined,
+              signerAddress: paymentAuth.signerAddress,
               network: config.telegraph.network,
             },
           };
@@ -172,7 +175,12 @@ export class TelegraphClient {
             status: 'FAILED',
             error: `x402 payment authorization rejected by facilitator: ${retryError.message}`,
             verification: { verified: false, status: 'FAILED', minerId: minerReq.minerId },
-            payment: { settled: false, status: 'PAYMENT_FAILED', error: retryError.message },
+            payment: {
+              settled: false,
+              status: 'PAYMENT_FAILED',
+              signerAddress: paymentAuth.signerAddress,
+              error: retryError.message,
+            },
           };
         }
       }
