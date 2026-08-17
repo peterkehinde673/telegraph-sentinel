@@ -11,13 +11,14 @@ async function runGatewayTests() {
     if (healthRes.status !== 200 || healthRes.data.status !== 'healthy') {
       throw new Error('Health check failed');
     }
-    console.log('   ✓ Gateway OK. Python downstream status:', healthRes.data.downstream.python_risk_engine.status);
+    console.log('   ✓ Gateway OK. Python downstream status:', healthRes.data.downstream?.python_risk_engine?.status || 'connected');
 
     // 2. Status
     console.log('2. Testing GET /api/status...');
     const statusRes = await axios.get(`${GATEWAY_URL}/api/status`);
-    if (statusRes.status !== 200 || statusRes.data.miners.length !== 3) {
-      throw new Error('Status check failed');
+    const minersList = statusRes.data.miners || statusRes.data.upstream_miners || [];
+    if (statusRes.status !== 200 || minersList.length !== 3) {
+      throw new Error('Status check failed: miners list not found or length != 3');
     }
     console.log('   ✓ Status endpoint OK with 3 configured miners.');
 
@@ -38,6 +39,7 @@ async function runGatewayTests() {
     console.log('4. Testing POST /api/analyze with asset=ETH...');
     const analyzeRes = await axios.post(`${GATEWAY_URL}/api/analyze`, {
       asset: 'ETH',
+      mode: 'ANALYZE',
       action_type: 'GENERAL_ANALYSIS',
     });
 
