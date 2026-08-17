@@ -9,11 +9,27 @@ export interface TelegraphCallParams {
   params?: Record<string, any>;
 }
 
+export interface TelegraphVerificationMeta {
+  verified: boolean;
+  status: 'TELEGRAPH_VERIFIED' | 'UNVERIFIED' | 'UNCONFIGURED' | 'FAILED';
+  proof?: string;
+  minerId: number;
+  network?: string;
+}
+
+export interface TelegraphPaymentMeta {
+  settled: boolean;
+  status: 'SETTLED' | 'PAYMENT_REQUIRED' | 'PAYMENT_NOT_CONFIGURED' | 'PAYMENT_FAILED' | 'UNVERIFIED' | 'NOT_REQUIRED';
+  receipt?: string;
+  network?: string;
+  error?: string;
+}
+
 export interface TelegraphResponse<T = any> {
   success: boolean;
   data?: T;
-  verification?: Record<string, any>;
-  payment?: Record<string, any>;
+  verification: TelegraphVerificationMeta;
+  payment: TelegraphPaymentMeta;
   error?: string;
   status: 'SUCCESS' | 'FAILED' | 'UNCONFIGURED';
 }
@@ -26,7 +42,7 @@ export class TelegraphClient {
     this.hasApiKey = Boolean(config.telegraph.apiKey && config.telegraph.apiKey.trim() !== '');
     this.http = axios.create({
       baseURL: config.telegraph.apiUrl,
-      timeout: 5000,
+      timeout: 6000,
       headers: {
         'Content-Type': 'application/json',
         ...(this.hasApiKey ? { Authorization: `Bearer ${config.telegraph.apiKey}` } : {}),
@@ -43,67 +59,120 @@ export class TelegraphClient {
       return {
         success: false,
         status: 'UNCONFIGURED',
-        error: `Telegraph API key not configured for Miner ${minerReq.minerId} (${minerReq.intent}). Live request deferred.`,
+        error: `Telegraph API key not configured for Miner ${minerReq.minerId} (${minerReq.intent}).`,
+        verification: {
+          verified: false,
+          status: 'UNCONFIGURED',
+          minerId: minerReq.minerId,
+        },
+        payment: {
+          settled: false,
+          status: 'NOT_REQUIRED',
+        },
       };
     }
 
     try {
-      // 1. First attempt
+      // 1. Standard Request
       const response = await this.http.get(minerReq.endpoint, {
         params: minerReq.params,
       });
+
+      const proofHeader = response.headers['x-telegraph-proof'];
+      const receiptHeader = response.headers['x-payment-receipt'];
 
       return {
         success: true,
         status: 'SUCCESS',
         data: response.data,
-        verification: response.headers['x-telegraph-proof']
-          ? { proof: response.headers['x-telegraph-proof'], network: config.telegraph.network }
-          : { verified_miner_id: minerReq.minerId, network: config.telegraph.network },
-        payment: response.headers['x-payment-receipt']
-          ? { receipt: response.headers['x-payment-receipt'] }
-          : {},
+        verification: {
+          verified: Boolean(proofHeader),
+          status: proofHeader ? 'TELEGRAPH_VERIFIED' : 'UNVERIFIED',
+          proof: proofHeader || undefined,
+          minerId: minerReq.minerId,
+          network: config.telegraph.network,
+        },
+        payment: {
+          settled: Boolean(receiptHeader),
+          status: receiptHeader ? 'SETTLED' : 'NOT_REQUIRED',
+          receipt: receiptHeader || undefined,
+          network: config.telegraph.network,
+        },
       };
     } catch (error: any) {
-      // 2. Handle x402 challenge flow
+      // 2. Handle x402 Challenge
       if (error.response?.status === 402) {
         if (!x402Signer.isWalletConfigured()) {
           return {
             success: false,
             status: 'FAILED',
-            error: `x402 Payment Required for Miner ${minerReq.minerId}, but WALLET_PRIVATE_KEY is unconfigured`,
-            payment: { status: 'PAYMENT_REQUIRED', network: config.telegraph.network },
+            error: `x402 Payment Required for Miner ${minerReq.minerId}, but WALLET_PRIVATE_KEY is unconfigured.`,
+            verification: {
+              verified: false,
+              status: 'FAILED',
+              minerId: minerReq.minerId,
+            },
+            payment: {
+              settled: false,
+              status: 'PAYMENT_NOT_CONFIGURED',
+              network: config.telegraph.network,
+              error: 'Missing wallet signing credentials in .env',
+            },
+          };
+        }
+
+        const paymentAuth = x402Signer.preparePaymentHeader({
+          facilitatorUrl: config.x402.facilitatorUrl,
+          network: config.telegraph.network,
+        });
+
+        if (paymentAuth.status !== 'PAYMENT_SIGNED') {
+          return {
+            success: false,
+            status: 'FAILED',
+            error: paymentAuth.error,
+            verification: { verified: false, status: 'FAILED', minerId: minerReq.minerId },
+            payment: { settled: false, status: 'PAYMENT_FAILED', error: paymentAuth.error },
           };
         }
 
         try {
-          // Construct payment authorization header and retry
-          const paymentHeaders = x402Signer.generatePaymentHeader({
-            facilitatorUrl: config.x402.facilitatorUrl,
-            network: config.telegraph.network,
-          });
-
           const retryResponse = await this.http.get(minerReq.endpoint, {
             params: minerReq.params,
-            headers: paymentHeaders,
+            headers: paymentAuth.headers,
           });
+
+          const proofHeader = retryResponse.headers['x-telegraph-proof'];
+          const receiptHeader = retryResponse.headers['x-payment-receipt'];
+
+          // Strictly require real receipt header from the facilitator
+          const isSettled = Boolean(receiptHeader && receiptHeader.trim().length > 0);
 
           return {
             success: true,
             status: 'SUCCESS',
             data: retryResponse.data,
-            verification: { verified_miner_id: minerReq.minerId, network: config.telegraph.network },
-            payment: {
-              settled: true,
+            verification: {
+              verified: Boolean(proofHeader),
+              status: proofHeader ? 'TELEGRAPH_VERIFIED' : 'UNVERIFIED',
+              proof: proofHeader || undefined,
+              minerId: minerReq.minerId,
               network: config.telegraph.network,
-              receipt: retryResponse.headers['x-payment-receipt'] || '0x_x402_settlement_confirmed',
+            },
+            payment: {
+              settled: isSettled,
+              status: isSettled ? 'SETTLED' : 'UNVERIFIED',
+              receipt: receiptHeader || undefined,
+              network: config.telegraph.network,
             },
           };
         } catch (retryError: any) {
           return {
             success: false,
             status: 'FAILED',
-            error: `x402 settlement failed for Miner ${minerReq.minerId}: ${retryError.message}`,
+            error: `x402 payment authorization rejected by facilitator: ${retryError.message}`,
+            verification: { verified: false, status: 'FAILED', minerId: minerReq.minerId },
+            payment: { settled: false, status: 'PAYMENT_FAILED', error: retryError.message },
           };
         }
       }
@@ -112,6 +181,8 @@ export class TelegraphClient {
         success: false,
         status: 'FAILED',
         error: `Miner ${minerReq.minerId} query failed: ${error.message}`,
+        verification: { verified: false, status: 'FAILED', minerId: minerReq.minerId },
+        payment: { settled: false, status: 'PAYMENT_FAILED', error: error.message },
       };
     }
   }

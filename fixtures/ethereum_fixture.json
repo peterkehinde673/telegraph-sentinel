@@ -7,36 +7,36 @@
       "miner_name": "CoinGecko",
       "intent": "CRYPTO_PRICE",
       "status": "success",
-      "timestamp": "2026-08-16T00:00:00.000Z",
-      "risk_signal": 22.5,
-      "confidence": 92.0,
-      "data": { "price_usd": 3450.25, "24h_change": "+2.4%", "volatility_score": "low" },
-      "verification": { "proof": "0x7a8f9b...dev_fixture", "network": "eip155:84532" },
-      "payment": { "receipt": "0xrcpt_fixture_207" }
+      "timestamp": "2026-08-17T05:00:00.000Z",
+      "risk_signal": 18.0,
+      "confidence": 95.0,
+      "data": { "price_usd": 3480.50, "change_24h_pct": 1.4 },
+      "verification": { "verified": false, "status": "UNVERIFIED", "minerId": 207 },
+      "payment": { "settled": false, "status": "NOT_REQUIRED" }
     },
     {
       "miner_id": 301,
       "miner_name": "TVL Oracle",
       "intent": "TVL_LOOKUP",
       "status": "success",
-      "timestamp": "2026-08-16T00:00:00.000Z",
-      "risk_signal": 18.0,
-      "confidence": 95.0,
-      "data": { "tvl_usd": 58200000000, "7d_tvl_delta": "+3.1%", "protocol_risk": "minimal" },
-      "verification": { "proof": "0x3c2e1a...dev_fixture", "network": "eip155:84532" },
-      "payment": { "receipt": "0xrcpt_fixture_301" }
+      "timestamp": "2026-08-17T05:00:00.000Z",
+      "risk_signal": 15.0,
+      "confidence": 92.0,
+      "data": { "tvl_usd": 62500000000, "tvl_7d_delta_pct": 2.8 },
+      "verification": { "verified": false, "status": "UNVERIFIED", "minerId": 301 },
+      "payment": { "settled": false, "status": "NOT_REQUIRED" }
     },
     {
       "miner_id": 202,
       "miner_name": "Tavily",
       "intent": "WEB_SEARCH",
       "status": "success",
-      "timestamp": "2026-08-16T00:00:00.000Z",
-      "risk_signal": 15.0,
+      "timestamp": "2026-08-17T05:00:00.000Z",
+      "risk_signal": 10.0,
       "confidence": 88.0,
-      "data": { "sentiment": "positive", "critical_security_breaches_found": 0, "articles_analyzed": 18 },
-      "verification": { "proof": "0x9d4e5f...dev_fixture", "network": "eip155:84532" },
-      "payment": { "receipt": "0xrcpt_fixture_202" }
+      "data": { "articles_analyzed": 14, "security_keyword_hits": 0, "flagged_summaries": [] },
+      "verification": { "verified": false, "status": "UNVERIFIED", "minerId": 202 },
+      "payment": { "settled": false, "status": "NOT_REQUIRED" }
     }
   ]
 }

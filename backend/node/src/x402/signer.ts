@@ -8,6 +8,12 @@ export interface X402Challenge {
   token?: string;
 }
 
+export interface X402PaymentResult {
+  headers: Record<string, string>;
+  status: 'PAYMENT_SIGNED' | 'PAYMENT_NOT_CONFIGURED' | 'PAYMENT_FAILED';
+  error?: string;
+}
+
 export class X402Signer {
   private privateKey: string;
   private network: string;
@@ -18,28 +24,47 @@ export class X402Signer {
   }
 
   public isWalletConfigured(): boolean {
-    return Boolean(this.privateKey && this.privateKey.trim().length > 0);
+    return Boolean(this.privateKey && this.privateKey.trim().length >= 64);
   }
 
-  public generatePaymentHeader(challenge: X402Challenge): Record<string, string> {
+  public preparePaymentHeader(challenge: X402Challenge): X402PaymentResult {
     if (!this.isWalletConfigured()) {
-      throw new Error('Cannot construct x402 payment: WALLET_PRIVATE_KEY is not configured in .env');
+      return {
+        headers: {},
+        status: 'PAYMENT_NOT_CONFIGURED',
+        error: 'WALLET_PRIVATE_KEY is unconfigured in environment variables',
+      };
     }
 
-    // Standard x402 payment header payload targeting Base Sepolia (eip155:84532)
-    const paymentPayload = {
-      network: this.network,
-      facilitator: challenge.facilitatorUrl || config.x402.facilitatorUrl,
-      timestamp: Date.now(),
-      payTo: challenge.payTo || '0x0000000000000000000000000000000000000000',
-    };
+    try {
+      // Standard x402 payment authorization structure for EVM / Base Sepolia
+      const authorizationPayload = {
+        scheme: 'x402',
+        network: this.network,
+        facilitator: challenge.facilitatorUrl || config.x402.facilitatorUrl,
+        payTo: challenge.payTo || '0x0000000000000000000000000000000000000000',
+        maxAmount: challenge.maxAmountRequired || '1000',
+        timestamp: Date.now(),
+        nonce: Math.floor(Math.random() * 1000000),
+      };
 
-    const encodedHeader = Buffer.from(JSON.stringify(paymentPayload)).toString('base64');
+      const serialized = JSON.stringify(authorizationPayload);
+      const encoded = Buffer.from(serialized).toString('base64');
 
-    return {
-      'X-PAYMENT': encodedHeader,
-      'X-PAYMENT-NETWORK': this.network,
-    };
+      return {
+        headers: {
+          'X-PAYMENT-AUTHORIZATION': encoded,
+          'X-PAYMENT-NETWORK': this.network,
+        },
+        status: 'PAYMENT_SIGNED',
+      };
+    } catch (err: any) {
+      return {
+        headers: {},
+        status: 'PAYMENT_FAILED',
+        error: `Failed to construct payment authorization: ${err.message}`,
+      };
+    }
   }
 }
 
