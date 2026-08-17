@@ -1,0 +1,61 @@
+version: 1.0.0
+kind: miner
+metadata:
+  id: telegraph-sentinel-risk-miner
+  slug: sentinel-risk-oracle
+  name: Telegraph Sentinel Risk Intelligence
+  description: Autonomous pre-flight DeFi risk intelligence and multi-signal deterministic decision engine.
+  version: 0.2.0
+  author: peterkehinde673
+  repository: https://github.com/peterkehinde673/telegraph-sentinel
+network:
+  supportedChains:
+    - eip155:84532
+    - eip155:8453
+  baseUrl: https://6bcee936f5e245.lhr.life
+  x402:
+    enabled: true
+    facilitatorUrl: https://facilitator.x402.org
+    defaultNetwork: eip155:84532
+    pricingModel: x402-per-request
+    floorPriceUsd: 0.001
+intents:
+  - crypto_risk_assessment
+  - defi_preflight_audit
+  - security_incident_scan
+endpoints:
+  - intent: crypto_risk_assessment
+    path: /api/v1/miner/risk-assessment
+    method: POST
+    description: Evaluates composite risk score (0-100), confidence (0-100), and outputs APPROVE, REVIEW, or BLOCK.
+    requestParameters:
+      asset:
+        type: string
+        required: true
+        example: ETH
+      mode:
+        type: string
+        required: false
+        enum:
+          - ANALYZE
+          - PROTECT
+          - AUTOPILOT
+        default: ANALYZE
+      action_type:
+        type: string
+        required: false
+        default: GENERAL_ANALYSIS
+    responseSchema:
+      analysis_id: string
+      asset: string
+      mode: string
+      risk_score: number
+      confidence_score: number
+      decision: string
+      reason_codes: array
+      signals: array
+      evidence: array
+      verification_metadata: object
+onchain:
+  feeRecipient: "0x6811A9e33cE68FBdF6e07DFacAb317072C287596"
+  chainIdentifier: eip155:84532
