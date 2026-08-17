@@ -1,13 +1,15 @@
-# Telegraph Miner Integration
+# Telegraph Integrate — Track 1 Miner Specification
 
-## Authoritative Miners Used
-* **CoinGecko (Miner 207)**: `CRYPTO_PRICE` — crypto prices and market data.
-* **TVL Oracle (Miner 301)**: `TVL_LOOKUP` — protocol metrics and total value locked.
-* **Tavily (Miner 202)**: `WEB_SEARCH` — real-time security events, exploit disclosures, and news.
+## Overview
+Telegraph Sentinel participates in **Track 1: Providing Intelligence (Becoming a Miner)** by exposing an autonomous pre-flight DeFi risk intelligence endpoint on Telegraph Protocol.
 
-## x402 Payment Negotiation
-1. Gateway requests Miner endpoint.
-2. If `402 Payment Required` is returned, server retrieves challenge parameters.
-3. Server-side signer signs payment against Base Sepolia (`eip155:84532`).
-4. Re-submits with `X-PAYMENT` header.
-5. Facilitator settles and returns verified Miner output with proof receipt.
+## 3-Step Integrate Workflow
+1. **YAML Specification**: Defines kind: miner, supported intents (`CRYPTO_RISK_ASSESSMENT`, `DEFI_PREFLIGHT_AUDIT`, `SECURITY_INCIDENT_SCAN`), endpoint schemas, and x402 pricing floor.
+2. **Import & Hash**: Computes deterministic `keccak256` bytes32 hash of the normalized specification.
+3. **On-Chain Registration (Base Sepolia)**: Registers the miner via the Base Sepolia Registry Contract (`eip155:84532`) linking the bytes32 hash and IPFS spec URI.
+
+## Live Endpoints
+* `GET /api/v1/miner/spec.yaml` — Machine-readable YAML miner integration schema.
+* `POST /api/v1/miner/risk-assessment` — Intelligence evaluation endpoint for autonomous agents.
+* `POST /api/v1/miner/yaml/validate` — YAML syntax parser and `keccak256` generator.
+* `GET /api/v1/miner/contract-config` — Base Sepolia Registry ABI and contract address.

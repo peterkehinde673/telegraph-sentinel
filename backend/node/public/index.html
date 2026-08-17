@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Telegraph Sentinel — Verified Autonomous Risk Intelligence</title>
+  <title>Telegraph Sentinel — Track 1 Miner & Risk Engine</title>
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -15,7 +15,7 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace, sans-serif;
       -webkit-font-smoothing: antialiased;
     }
-    input, select, button { font-family: inherit; }
+    input, select, button, textarea { font-family: inherit; }
   </style>
 </head>
 <body>
@@ -27,6 +27,7 @@
     function App() {
       const [asset, setAsset] = useState('ETH');
       const [actionType, setActionType] = useState('GENERAL_ANALYSIS');
+      const [operatingMode, setOperatingMode] = useState('ANALYZE');
       const [useFixture, setUseFixture] = useState(false);
       const [loading, setLoading] = useState(false);
       const [result, setResult] = useState(null);
@@ -37,9 +38,18 @@
       const [alertBanner, setAlertBanner] = useState(null);
       const [wsEvents, setWsEvents] = useState([]);
 
+      // Track 1 States
+      const [minerYaml, setMinerYaml] = useState('');
+      const [yamlValidation, setYamlValidation] = useState(null);
+      const [walletAddress, setWalletAddress] = useState(null);
+      const [chainId, setChainId] = useState(null);
+      const [ipfsUriInput, setIpfsUriInput] = useState('');
+      const [regStatus, setRegStatus] = useState(null);
+
       useEffect(() => {
         fetchRecentAnalyses();
         fetchWatchRules();
+        loadDefaultYaml();
 
         const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         const ws = new WebSocket(`${wsProtocol}//${window.location.host}`);
@@ -56,7 +66,7 @@
           try {
             const msg = JSON.parse(event.data);
             addWsLog(`Event: ${msg.type}`);
-            if (msg.type === 'ANALYSIS_COMPLETED') {
+            if (msg.type === 'ANALYSIS_COMPLETED' || msg.type === 'MINER_INTELLIGENCE_DISPATCHED') {
               fetchRecentAnalyses();
             } else if (msg.type === 'WATCH_ALERT') {
               setAlertBanner(`🚨 Sentinel Watch Alert on ${msg.data.asset}: ${msg.data.trigger_reason}`);
@@ -71,6 +81,34 @@
 
       const addWsLog = (text) => {
         setWsEvents(prev => [{ text, time: new Date().toLocaleTimeString() }, ...prev.slice(0, 15)]);
+      };
+
+      const loadDefaultYaml = async () => {
+        try {
+          const res = await fetch('/api/v1/miner/spec.yaml');
+          const text = await res.text();
+          setMinerYaml(text);
+          validateYamlText(text);
+        } catch (e) {
+          console.warn('Failed to load default YAML', e);
+        }
+      };
+
+      const validateYamlText = async (text) => {
+        try {
+          const res = await fetch('/api/v1/miner/yaml/validate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ rawYaml: text }),
+          });
+          const data = await res.json();
+          setYamlValidation(data);
+          if (data.hashes && !ipfsUriInput) {
+            setIpfsUriInput(`ipfs://${data.hashes.ipfsCidPlaceholder}`);
+          }
+        } catch (e) {
+          console.error(e);
+        }
       };
 
       const fetchRecentAnalyses = async () => {
@@ -100,7 +138,7 @@
           const res = await fetch(`/api/analyze?mode=${useFixture ? 'fixture' : 'live'}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ asset, action_type: actionType }),
+            body: JSON.stringify({ asset, mode: operatingMode, action_type: actionType }),
           });
           const data = await res.json();
           setResult(data);
@@ -117,12 +155,96 @@
           await fetch('/api/watch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ asset, riskThreshold: 60, confidenceThreshold: 85 }),
+            body: JSON.stringify({ asset, mode: operatingMode, riskThreshold: 60, confidenceThreshold: 85 }),
           });
           fetchWatchRules();
-          alert(`Monitoring rule saved for ${asset}`);
+          alert(`Watch monitoring active for ${asset} (${operatingMode} mode)`);
         } catch (e) {
           alert(e.message);
+        }
+      };
+
+      const connectWallet = async () => {
+        if (typeof window.ethereum === 'undefined') {
+          alert('MetaMask or Web3 wallet not detected. Please install a Web3 browser extension.');
+          return;
+        }
+        try {
+          const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+          const chain = await window.ethereum.request({ method: 'eth_chainId' });
+          setWalletAddress(accounts[0]);
+          setChainId(parseInt(chain, 16));
+
+          if (parseInt(chain, 16) !== 84532) {
+            try {
+              await window.ethereum.request({
+                method: 'wallet_switchEthereumChain',
+                params: [{ chainId: '0x14a34' }],
+              });
+              setChainId(84532);
+            } catch (switchError) {
+              console.warn('Network switch error', switchError);
+            }
+          }
+        } catch (err) {
+          alert('Wallet connection failed: ' + err.message);
+        }
+      };
+
+      const submitOnchainRegistration = async () => {
+        if (!yamlValidation || !yamlValidation.valid) {
+          alert('Cannot register: YAML is invalid');
+          return;
+        }
+        if (!walletAddress) {
+          await connectWallet();
+          return;
+        }
+
+        setRegStatus({ status: 'PENDING', message: 'Encoding registration transaction payload...' });
+
+        try {
+          const encodeRes = await fetch('/api/v1/miner/onchain/encode-register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              yamlHash: yamlValidation.hashes.bytes32Hash,
+              ipfsUri: ipfsUriInput,
+              intents: yamlValidation.spec.intents,
+              feeRecipient: walletAddress,
+              floorPriceUsd: 0.001,
+            }),
+          });
+
+          const txData = await encodeRes.json();
+          if (txData.error) {
+            throw new Error(txData.error);
+          }
+
+          setRegStatus({ status: 'PROMPT', message: 'Please confirm transaction in your Web3 wallet...' });
+
+          const txHash = await window.ethereum.request({
+            method: 'eth_sendTransaction',
+            params: [{
+              from: walletAddress,
+              to: txData.to,
+              data: txData.data,
+              value: '0x0',
+            }],
+          });
+
+          setRegStatus({
+            status: 'SUCCESS',
+            txHash,
+            explorerUrl: `https://sepolia.basescan.org/tx/${txHash}`,
+            yamlHash: yamlValidation.hashes.bytes32Hash,
+            message: 'Miner registration submitted to Base Sepolia!',
+          });
+        } catch (err) {
+          setRegStatus({
+            status: 'FAILED',
+            error: err.message || 'Transaction rejected or failed',
+          });
         }
       };
 
@@ -137,15 +259,16 @@
       };
 
       return (
-        <div style={{ maxWidth: '1050px', margin: '0 auto', padding: '24px 16px' }}>
+        <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '24px 16px' }}>
           {/* Header */}
           <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #21262d', paddingBottom: '16px', marginBottom: '20px' }}>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <h1 style={{ fontSize: '22px', fontWeight: '800', letterSpacing: '-0.5px' }}>TELEGRAPH SENTINEL</h1>
-                <span style={{ fontSize: '10px', background: '#1f6feb22', border: '1px solid #1f6feb', color: '#58a6ff', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>EVM: BASE SEPOLIA</span>
+                <span style={{ fontSize: '10px', background: '#23863622', border: '1px solid #238636', color: '#3fb950', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>TRACK 1 MINER</span>
+                <span style={{ fontSize: '10px', background: '#1f6feb22', border: '1px solid #1f6feb', color: '#58a6ff', padding: '2px 8px', borderRadius: '12px', fontWeight: 700 }}>BASE SEPOLIA</span>
               </div>
-              <p style={{ color: '#8b949e', fontSize: '13px', marginTop: '4px' }}>Verified intelligence before every critical crypto decision</p>
+              <p style={{ color: '#8b949e', fontSize: '13px', marginTop: '4px' }}>Autonomous pre-flight risk intelligence & verifiable Telegraph miner</p>
             </div>
             <div style={{ textAlign: 'right' }}>
               <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: wsStatus === 'CONNECTED' ? '#2ea043' : '#f85149', marginRight: '6px' }}></span>
@@ -161,31 +284,186 @@
           )}
 
           {/* Navigation */}
-          <nav style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-            {['ANALYZE', 'WATCH', 'HISTORY', 'WS EVENTS'].map(tab => (
+          <nav style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+            {[
+              { id: 'ANALYZE', label: 'RISK ANALYZER' },
+              { id: 'TRACK1', label: '⚡ TRACK 1: TELEGRAPH INTEGRATE' },
+              { id: 'WATCH', label: 'SENTINEL WATCH' },
+              { id: 'HISTORY', label: 'AUDIT TRAIL' },
+              { id: 'WS_EVENTS', label: 'WS EVENTS' },
+            ].map(tab => (
               <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
                 style={{
                   padding: '8px 16px',
-                  backgroundColor: activeTab === tab ? '#161b22' : 'transparent',
-                  color: activeTab === tab ? '#58a6ff' : '#8b949e',
+                  backgroundColor: activeTab === tab.id ? '#161b22' : 'transparent',
+                  color: activeTab === tab.id ? '#58a6ff' : '#8b949e',
                   border: '1px solid',
-                  borderColor: activeTab === tab ? '#388bfd' : '#21262d',
+                  borderColor: activeTab === tab.id ? '#388bfd' : '#21262d',
                   borderRadius: '6px',
                   cursor: 'pointer',
                   fontWeight: 600,
                   fontSize: '13px'
                 }}
               >
-                {tab}
+                {tab.label}
               </button>
             ))}
           </nav>
 
+          {/* TRACK 1 PORTAL */}
+          {activeTab === 'TRACK1' && (
+            <div>
+              <div style={{ background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '20px', marginBottom: '20px' }}>
+                <h2 style={{ fontSize: '16px', marginBottom: '6px' }}>TRACK 1 — PROVIDING INTELLIGENCE (BECOME A MINER)</h2>
+                <p style={{ fontSize: '12px', color: '#8b949e', marginBottom: '16px' }}>
+                  Register Sentinel as an authoritative risk intelligence miner on Telegraph Protocol: <strong>1. Generate YAML</strong> &rarr; <strong>2. Import &amp; Hash</strong> &rarr; <strong>3. Register On-Chain (Base Sepolia)</strong>.
+                </p>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+                  <div style={{ background: '#161b22', border: '1px solid #30363d', padding: '12px', borderRadius: '6px' }}>
+                    <div style={{ fontSize: '11px', color: '#58a6ff', fontWeight: 700 }}>STEP 1</div>
+                    <strong style={{ fontSize: '13px' }}>YAML Specification</strong>
+                    <div style={{ fontSize: '11px', color: '#8b949e', marginTop: '2px' }}>kind: miner (v1.0.0)</div>
+                  </div>
+                  <div style={{ background: '#161b22', border: '1px solid #30363d', padding: '12px', borderRadius: '6px' }}>
+                    <div style={{ fontSize: '11px', color: '#58a6ff', fontWeight: 700 }}>STEP 2</div>
+                    <strong style={{ fontSize: '13px' }}>Content Hashing</strong>
+                    <div style={{ fontSize: '11px', color: '#8b949e', marginTop: '2px' }}>bytes32 keccak256</div>
+                  </div>
+                  <div style={{ background: '#161b22', border: '1px solid #30363d', padding: '12px', borderRadius: '6px' }}>
+                    <div style={{ fontSize: '11px', color: '#58a6ff', fontWeight: 700 }}>STEP 3</div>
+                    <strong style={{ fontSize: '13px' }}>Base Sepolia Register</strong>
+                    <div style={{ fontSize: '11px', color: '#8b949e', marginTop: '2px' }}>ChainId: 84532</div>
+                  </div>
+                </div>
+
+                <div style={{ marginBottom: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ fontSize: '12px', color: '#8b949e', textTransform: 'uppercase' }}>Telegraph Miner YAML Config</label>
+                    <a href="/api/v1/miner/spec.yaml" target="_blank" style={{ fontSize: '11px', color: '#58a6ff', textDecoration: 'none' }}>View Raw YAML ↗</a>
+                  </div>
+                  <textarea
+                    rows={12}
+                    value={minerYaml}
+                    onChange={(e) => {
+                      setMinerYaml(e.target.value);
+                      validateYamlText(e.target.value);
+                    }}
+                    style={{ width: '100%', padding: '12px', background: '#161b22', border: '1px solid #30363d', color: '#7ee787', borderRadius: '6px', fontSize: '12px', fontFamily: 'monospace' }}
+                  />
+                </div>
+
+                {yamlValidation && (
+                  <div style={{ background: yamlValidation.valid ? '#161b22' : 'rgba(248, 81, 73, 0.1)', border: `1px solid ${yamlValidation.valid ? '#238636' : '#f85149'}`, padding: '14px', borderRadius: '6px', marginBottom: '20px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                      <span style={{ fontSize: '12px', fontWeight: 700, color: yamlValidation.valid ? '#3fb950' : '#f85149' }}>
+                        {yamlValidation.valid ? '✓ YAML SPECIFICATION VALID' : '✗ YAML SCHEMA VALIDATION ERRORS'}
+                      </span>
+                    </div>
+
+                    {yamlValidation.errors && yamlValidation.errors.length > 0 && (
+                      <ul style={{ color: '#ff7b72', fontSize: '12px', paddingLeft: '18px' }}>
+                        {yamlValidation.errors.map((err, i) => <li key={i}>{err}</li>)}
+                      </ul>
+                    )}
+
+                    {yamlValidation.hashes && (
+                      <div style={{ fontSize: '12px', marginTop: '8px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '4px' }}>
+                          <span style={{ color: '#8b949e' }}>bytes32 keccak256 Hash:</span>
+                          <code style={{ color: '#79c0ff' }}>{yamlValidation.hashes.bytes32Hash}</code>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#8b949e' }}>Deterministic IPFS URI:</span>
+                          <code style={{ color: '#56d364' }}>ipfs://{yamlValidation.hashes.ipfsCidPlaceholder}</code>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: '6px', padding: '16px' }}>
+                  <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>STEP 3: REGISTER ON-CHAIN (BASE SEPOLIA)</h3>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginBottom: '14px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', color: '#8b949e', marginBottom: '4px' }}>IPFS / SPEC URI</label>
+                      <input
+                        type="text"
+                        value={ipfsUriInput}
+                        onChange={(e) => setIpfsUriInput(e.target.value)}
+                        style={{ width: '100%', padding: '8px', background: '#0d1117', border: '1px solid #30363d', color: '#fff', borderRadius: '4px', fontSize: '12px' }}
+                      />
+                    </div>
+
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', color: '#8b949e', marginBottom: '4px' }}>WEB3 WALLET</label>
+                      <button
+                        type="button"
+                        onClick={connectWallet}
+                        style={{
+                          width: '100%',
+                          padding: '8px',
+                          background: walletAddress ? '#23863622' : '#21262d',
+                          border: `1px solid ${walletAddress ? '#238636' : '#30363d'}`,
+                          color: walletAddress ? '#3fb950' : '#c9d1d9',
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: 600
+                        }}
+                      >
+                        {walletAddress ? `Connected: ${walletAddress.slice(0, 6)}...${walletAddress.slice(-4)}` : 'Connect MetaMask / Web3'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={submitOnchainRegistration}
+                    disabled={!yamlValidation?.valid}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      background: '#1f6feb',
+                      color: '#fff',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 700,
+                      cursor: yamlValidation?.valid ? 'pointer' : 'not-allowed',
+                      fontSize: '13px'
+                    }}
+                  >
+                    SUBMIT MINER REGISTRATION (BASE SEPOLIA)
+                  </button>
+
+                  {regStatus && (
+                    <div style={{ marginTop: '14px', background: '#0d1117', padding: '12px', borderRadius: '4px', fontSize: '12px' }}>
+                      <div style={{ fontWeight: 600, color: regStatus.status === 'SUCCESS' ? '#3fb950' : regStatus.status === 'FAILED' ? '#ff7b72' : '#e3b341' }}>
+                        {regStatus.message}
+                      </div>
+                      {regStatus.txHash && (
+                        <div style={{ marginTop: '6px' }}>
+                          <span>Tx Hash: </span>
+                          <a href={regStatus.explorerUrl} target="_blank" style={{ color: '#58a6ff', textDecoration: 'underline' }}>
+                            {regStatus.txHash} ↗
+                          </a>
+                        </div>
+                      )}
+                      {regStatus.error && (
+                        <div style={{ color: '#ff7b72', marginTop: '4px' }}>{regStatus.error}</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* RISK ANALYZER */}
           {activeTab === 'ANALYZE' && (
             <div>
-              {/* Input Card */}
               <div style={{ background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '18px', marginBottom: '20px' }}>
                 <div style={{ display: 'flex', gap: '6px', marginBottom: '14px' }}>
                   <span style={{ fontSize: '11px', color: '#8b949e', alignSelf: 'center', marginRight: '6px' }}>PRESETS:</span>
@@ -222,6 +500,19 @@
                   </div>
 
                   <div>
+                    <label style={{ display: 'block', fontSize: '11px', color: '#8b949e', marginBottom: '6px', textTransform: 'uppercase' }}>Operating Mode</label>
+                    <select
+                      value={operatingMode}
+                      onChange={(e) => setOperatingMode(e.target.value)}
+                      style={{ width: '100%', padding: '10px', background: '#161b22', border: '1px solid #30363d', color: '#fff', borderRadius: '6px', fontWeight: 600 }}
+                    >
+                      <option value="ANALYZE">ANALYZE (Audit Baseline)</option>
+                      <option value="PROTECT">PROTECT (Active Defense)</option>
+                      <option value="AUTOPILOT">AUTOPILOT (Continuous Policy)</option>
+                    </select>
+                  </div>
+
+                  <div>
                     <label style={{ display: 'block', fontSize: '11px', color: '#8b949e', marginBottom: '6px', textTransform: 'uppercase' }}>Proposed Action</label>
                     <select
                       value={actionType}
@@ -235,7 +526,7 @@
                   </div>
 
                   <div>
-                    <label style={{ display: 'block', fontSize: '11px', color: '#8b949e', marginBottom: '6px', textTransform: 'uppercase' }}>Execution Mode</label>
+                    <label style={{ display: 'block', fontSize: '11px', color: '#8b949e', marginBottom: '6px', textTransform: 'uppercase' }}>Execution Source</label>
                     <button
                       type="button"
                       onClick={() => setUseFixture(!useFixture)}
@@ -291,12 +582,11 @@
                 </div>
               </div>
 
-              {/* Result Visual Hierarchy: DECISION -> RISK -> CONFIDENCE */}
               {result && (
                 <div>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px', marginBottom: '20px' }}>
                     <div style={{ background: '#0d1117', border: `2px solid ${getDecisionColor(result.decision)}`, borderRadius: '8px', padding: '16px', textAlign: 'center' }}>
-                      <div style={{ fontSize: '11px', color: '#8b949e' }}>SENTINEL DECISION</div>
+                      <div style={{ fontSize: '11px', color: '#8b949e' }}>SENTINEL DECISION ({result.mode})</div>
                       <div style={{ fontSize: '24px', fontWeight: '800', color: getDecisionColor(result.decision), marginTop: '4px' }}>{result.decision}</div>
                     </div>
 
@@ -321,7 +611,6 @@
                     </div>
                   </div>
 
-                  {/* Signals */}
                   <h3 style={{ fontSize: '14px', marginBottom: '10px', letterSpacing: '0.5px' }}>TELEGRAPH MINER SIGNALS</h3>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '12px', marginBottom: '20px' }}>
                     {result.signals.map((sig, idx) => (
@@ -343,9 +632,17 @@
                     ))}
                   </div>
 
-                  {/* Evidence & Verification */}
                   <div style={{ background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '16px' }}>
-                    <h3 style={{ fontSize: '14px', marginBottom: '10px' }}>EVIDENCE & RISK BREAKDOWN</h3>
+                    <h3 style={{ fontSize: '14px', marginBottom: '10px' }}>EVIDENCE & REASON CODES</h3>
+                    {result.reason_codes && (
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '10px' }}>
+                        {result.reason_codes.map((code, i) => (
+                          <span key={i} style={{ fontSize: '10px', background: '#21262d', border: '1px solid #30363d', color: '#58a6ff', padding: '2px 6px', borderRadius: '4px', fontFamily: 'monospace' }}>
+                            {code}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                     <ul style={{ listStyle: 'none', padding: 0 }}>
                       {result.evidence.map((e, idx) => (
                         <li key={idx} style={{ padding: '8px 0', borderBottom: '1px solid #161b22', fontSize: '12px', display: 'flex', justifyContent: 'space-between' }}>
@@ -365,6 +662,7 @@
             </div>
           )}
 
+          {/* SENTINEL WATCH */}
           {activeTab === 'WATCH' && (
             <div style={{ background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '16px' }}>
               <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>SENTINEL WATCH ACTIVE RULES</h3>
@@ -373,11 +671,11 @@
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {watchRules.map(r => (
-                    <div key={r.id} style={{ background: '#161b22', border: '1px solid #30363d', padding: '12px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div key={r.id || r.rule_id} style={{ background: '#161b22', border: '1px solid #30363d', padding: '12px', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <strong>{r.asset}</strong>
+                        <strong>{r.asset}</strong> <span style={{ fontSize: '10px', color: '#58a6ff' }}>[{r.mode || 'AUTOPILOT'}]</span>
                         <div style={{ fontSize: '11px', color: '#8b949e', marginTop: '2px' }}>
-                          Alert if Risk ≥ {r.riskThreshold} OR Confidence &lt; {r.confidenceThreshold}%
+                          Alert if Risk ≥ {r.riskThreshold || r.risk_threshold} OR Confidence &lt; {r.confidenceThreshold || r.confidence_threshold}%
                         </div>
                       </div>
                       <span style={{ fontSize: '10px', background: '#23863622', color: '#3fb950', padding: '2px 6px', borderRadius: '4px' }}>{r.status}</span>
@@ -388,6 +686,7 @@
             </div>
           )}
 
+          {/* AUDIT TRAIL */}
           {activeTab === 'HISTORY' && (
             <div style={{ background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '16px' }}>
               <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>PERSISTENT SQLite AUDIT TRAIL</h3>
@@ -398,6 +697,7 @@
                   <thead>
                     <tr style={{ borderBottom: '1px solid #30363d', textAlign: 'left', color: '#8b949e' }}>
                       <th style={{ padding: '6px' }}>Asset</th>
+                      <th style={{ padding: '6px' }}>Mode</th>
                       <th style={{ padding: '6px' }}>Decision</th>
                       <th style={{ padding: '6px' }}>Risk</th>
                       <th style={{ padding: '6px' }}>Confidence</th>
@@ -408,6 +708,7 @@
                     {history.map(h => (
                       <tr key={h.analysis_id} style={{ borderBottom: '1px solid #161b22' }}>
                         <td style={{ padding: '6px', fontWeight: 'bold' }}>{h.asset}</td>
+                        <td style={{ padding: '6px', color: '#58a6ff' }}>{h.mode || 'ANALYZE'}</td>
                         <td style={{ padding: '6px', color: getDecisionColor(h.decision), fontWeight: 'bold' }}>{h.decision}</td>
                         <td style={{ padding: '6px' }}>{h.risk_score}</td>
                         <td style={{ padding: '6px' }}>{h.confidence_score}%</td>
@@ -420,7 +721,8 @@
             </div>
           )}
 
-          {activeTab === 'WS EVENTS' && (
+          {/* WS STREAM */}
+          {activeTab === 'WS_EVENTS' && (
             <div style={{ background: '#0d1117', border: '1px solid #21262d', borderRadius: '8px', padding: '16px' }}>
               <h3 style={{ fontSize: '14px', marginBottom: '12px' }}>LIVE WEBSOCKET STREAM</h3>
               <div style={{ background: '#161b22', padding: '12px', borderRadius: '6px', maxHeight: '250px', overflowY: 'auto' }}>

@@ -5,6 +5,7 @@ import { config } from './config';
 export interface WatchRule {
   id: string;
   asset: string;
+  mode?: string;
   riskThreshold: number;
   confidenceThreshold: number;
   intervalMinutes: number;
@@ -19,6 +20,7 @@ export function addWatchRule(rule: Omit<WatchRule, 'id' | 'status'>): WatchRule 
   const id = `watch_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
   const newRule: WatchRule = {
     ...rule,
+    mode: rule.mode || 'AUTOPILOT',
     id,
     status: 'ACTIVE',
   };
@@ -37,7 +39,6 @@ export function deleteWatchRule(id: string): boolean {
 export function startWatchScheduler() {
   if (monitorTimer) return;
   
-  // Check every 30 seconds for eligible watch items
   monitorTimer = setInterval(async () => {
     const now = new Date();
     for (const rule of activeWatchRules.values()) {
@@ -46,13 +47,13 @@ export function startWatchScheduler() {
       try {
         const response = await axios.post(`http://127.0.0.1:${config.port}/api/analyze`, {
           asset: rule.asset,
+          mode: rule.mode || 'AUTOPILOT',
           action_type: 'WATCH_MONITOR',
         });
 
         const result = response.data;
         rule.lastChecked = now.toISOString();
 
-        // Alert condition: risk >= threshold OR confidence < threshold
         const isRiskAlert = result.risk_score >= rule.riskThreshold;
         const isConfidenceAlert = result.confidence_score < rule.confidenceThreshold;
 
@@ -60,7 +61,10 @@ export function startWatchScheduler() {
           wsServer.broadcast('WATCH_ALERT', {
             rule_id: rule.id,
             asset: rule.asset,
-            trigger_reason: isRiskAlert ? `Risk score (${result.risk_score}) exceeded threshold (${rule.riskThreshold})` : `Confidence (${result.confidence_score}) dropped below threshold (${rule.confidenceThreshold})`,
+            mode: rule.mode,
+            trigger_reason: isRiskAlert
+              ? `Risk score (${result.risk_score}) exceeded threshold (${rule.riskThreshold})`
+              : `Confidence (${result.confidence_score}) dropped below threshold (${rule.confidenceThreshold})`,
             analysis: result,
           });
         }
