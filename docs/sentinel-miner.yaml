@@ -12,7 +12,7 @@ network:
   supportedChains:
     - eip155:84532
     - eip155:8453
-  baseUrl: https://6bcee936f5e245.lhr.life
+  baseUrl: https://2e4730e5a9ce8a.lhr.life
   x402:
     enabled: true
     facilitatorUrl: https://facilitator.x402.org
