@@ -4,7 +4,7 @@ id: 501
 slug: sentinel-risk-oracle
 name: Telegraph Sentinel Risk Intelligence
 description: Autonomous pre-flight DeFi risk intelligence and multi-signal deterministic decision engine.
-base_url: https://ad58362518ffd7.lhr.life
+base_url: https://73d01b549b801f.lhr.life
 intents:
   - CRYPTO_PRICE
   - TVL_LOOKUP
