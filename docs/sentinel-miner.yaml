@@ -1,6 +1,6 @@
 version: 1.0.0
 kind: miner
-id: telegraph-sentinel-risk-miner
+id: 501
 slug: sentinel-risk-oracle
 name: Telegraph Sentinel Risk Intelligence
 description: Autonomous pre-flight DeFi risk intelligence and multi-signal deterministic decision engine.
@@ -11,14 +11,17 @@ intents:
   - WEB_SEARCH
 endpoints:
   - intent: CRYPTO_PRICE
+    path: /api/v1/miner/risk-assessment
     external_path: /api/v1/miner/risk-assessment
     method: POST
     description: Evaluates composite market and crypto pricing signals.
   - intent: TVL_LOOKUP
+    path: /api/v1/miner/risk-assessment
     external_path: /api/v1/miner/risk-assessment
     method: POST
     description: Evaluates DeFi protocol liquidity and TVL drawdown risk.
   - intent: WEB_SEARCH
+    path: /api/v1/miner/risk-assessment
     external_path: /api/v1/miner/risk-assessment
     method: POST
     description: Scans security exploit events and vulnerability disclosures.
