@@ -1,63 +1,24 @@
 version: 1.0.0
 kind: miner
-metadata:
-  id: telegraph-sentinel-risk-miner
-  slug: sentinel-risk-oracle
-  name: Telegraph Sentinel Risk Intelligence
-  description: Autonomous pre-flight DeFi risk intelligence and multi-signal deterministic decision engine.
-  version: 0.2.0
-  author: peterkehinde673
-  repository: https://github.com/peterkehinde673/telegraph-sentinel
-network:
-  supportedChains:
-    - eip155:84532
-    - eip155:8453
-  baseUrl: https://2e4730e5a9ce8a.lhr.life
-  x402:
-    enabled: true
-    facilitatorUrl: https://facilitator.x402.org
-    defaultNetwork: eip155:84532
-    pricingModel: x402-per-request
-    floorPriceUsd: 0.001
+id: telegraph-sentinel-risk-miner
+slug: sentinel-risk-oracle
+name: Telegraph Sentinel Risk Intelligence
+description: Autonomous pre-flight DeFi risk intelligence and multi-signal deterministic decision engine.
+base_url: https://ad58362518ffd7.lhr.life
 intents:
   - CRYPTO_PRICE
   - TVL_LOOKUP
   - WEB_SEARCH
 endpoints:
   - intent: CRYPTO_PRICE
-    path: /api/v1/miner/risk-assessment
+    external_path: /api/v1/miner/risk-assessment
     method: POST
     description: Evaluates composite market and crypto pricing signals.
-    requestParameters:
-      asset:
-        type: string
-        required: true
-        example: ETH
-    responseSchema:
-      risk_score: number
-      decision: string
   - intent: TVL_LOOKUP
-    path: /api/v1/miner/risk-assessment
+    external_path: /api/v1/miner/risk-assessment
     method: POST
     description: Evaluates DeFi protocol liquidity and TVL drawdown risk.
-    requestParameters:
-      asset:
-        type: string
-        required: true
-    responseSchema:
-      risk_score: number
-      decision: string
   - intent: WEB_SEARCH
-    path: /api/v1/miner/risk-assessment
+    external_path: /api/v1/miner/risk-assessment
     method: POST
     description: Scans security exploit events and vulnerability disclosures.
-    requestParameters:
-      asset:
-        type: string
-        required: true
-    responseSchema:
-      risk_score: number
-      decision: string
-onchain:
-  feeRecipient: "0x6811A9e33cE68FBdF6e07DFacAb317072C287596"
-  chainIdentifier: eip155:84532
