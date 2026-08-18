@@ -10,6 +10,11 @@ intents:
   - CRYPTO_PRICE
   - TVL_LOOKUP
   - WEB_SEARCH
+semantics:
+  intents:
+    - CRYPTO_PRICE
+    - TVL_LOOKUP
+    - WEB_SEARCH
 endpoints:
   - intent: CRYPTO_PRICE
     path: /api/v1/miner/risk-assessment
