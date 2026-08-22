@@ -1,0 +1,31 @@
+[package]
+name    = "telegraph-scoring"
+version = "0.1.0"
+edition = "2021"
+
+# ── Build target ──────────────────────────────────────────────────────────────
+# cargo build --target wasm32-unknown-unknown --release
+# Output: target/wasm32-unknown-unknown/release/telegraph_scoring.wasm
+[lib]
+crate-type = ["cdylib"]
+
+# ── Features ──────────────────────────────────────────────────────────────────
+[features]
+default = []
+# Activate once you have run scripts/export_minilm_weights.py
+real_weights = []
+
+# ── Dependencies ──────────────────────────────────────────────────────────────
+[dependencies]
+# Allocator for no_std WASM
+dlmalloc = { version = "0.2", features = ["global"] }
+# Pure-Rust math (exp, sqrt, tanh …) — no libc, no host calls
+libm     = { version = "0.2", default-features = false }
+
+# ── Release profile ───────────────────────────────────────────────────────────
+[profile.release]
+opt-level     = "z"     # minimise binary size
+lto           = true
+codegen-units = 1
+panic         = "abort"
+strip         = true
