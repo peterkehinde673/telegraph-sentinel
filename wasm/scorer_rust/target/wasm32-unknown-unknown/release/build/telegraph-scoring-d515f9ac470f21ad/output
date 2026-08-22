@@ -1,2 +1,0 @@
-cargo:rerun-if-changed=vocab.txt
-cargo:rerun-if-env-changed=CARGO_FEATURE_REAL_WEIGHTS
