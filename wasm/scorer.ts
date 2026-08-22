@@ -1,7 +1,3 @@
-// ============================================================================
-// Telegraph Protocol - Complete 8-Export Scorer ABI (f32 returns)
-// ============================================================================
-
 let heapOffset: i32 = 4096;
 
 export function alloc(size: i32): i32 {
@@ -19,7 +15,7 @@ export function alloc(size: i32): i32 {
 }
 
 export function dealloc(ptr: i32, size: i32): void {
-  // No-op for linear allocator
+  // No-op for linear bump allocator
 }
 
 function isAlphaNum(c: u8): bool {
@@ -39,7 +35,22 @@ function stringsEqual(p1: i32, l1: i32, p2: i32, l2: i32): bool {
   return true;
 }
 
-function countWords(ptr: i32, len: i32): i32 {
+function containsSubstring(haystackPtr: i32, haystackLen: i32, needlePtr: i32, needleLen: i32): bool {
+  if (needleLen <= 0 || haystackLen < needleLen) return false;
+  for (let i = 0; i <= haystackLen - needleLen; i++) {
+    let match = true;
+    for (let j = 0; j < needleLen; j++) {
+      if (toLower(load<u8>(haystackPtr + i + j)) != toLower(load<u8>(needlePtr + j))) {
+        match = false;
+        break;
+      }
+    }
+    if (match) return true;
+  }
+  return false;
+}
+
+function countAlphanumericTokens(ptr: i32, len: i32): i32 {
   let count = 0;
   let inWord = false;
   for (let i = 0; i < len; i++) {
@@ -58,12 +69,13 @@ function countWords(ptr: i32, len: i32): i32 {
 export function bm25_score(q_ptr: i32, q_len: i32, doc_ptr: i32, doc_len: i32): f32 {
   if (q_len <= 0 || doc_len <= 0) return 0.0;
   if (stringsEqual(q_ptr, q_len, doc_ptr, doc_len)) return 1.0;
+  if (containsSubstring(doc_ptr, doc_len, q_ptr, q_len)) return 1.0;
 
-  const w1 = countWords(q_ptr, q_len);
-  const w2 = countWords(doc_ptr, doc_len);
+  const w1 = countAlphanumericTokens(q_ptr, q_len);
+  const w2 = countAlphanumericTokens(doc_ptr, doc_len);
   if (w1 == 0 || w2 == 0) return 0.0;
 
-  let matches = 0;
+  let matchedTokens = 0;
   let wordStart = -1;
 
   for (let i = 0; i <= q_len; i++) {
@@ -85,7 +97,7 @@ export function bm25_score(q_ptr: i32, q_len: i32, doc_ptr: i32, doc_len: i32): 
               const dLen = j - dStart;
               const dPtr = doc_ptr + dStart;
               if (stringsEqual(wPtr, wLen, dPtr, dLen)) {
-                matches++;
+                matchedTokens++;
                 break;
               }
               dStart = -1;
@@ -97,9 +109,8 @@ export function bm25_score(q_ptr: i32, q_len: i32, doc_ptr: i32, doc_len: i32): 
     }
   }
 
-  const union = w1 + w2 - matches;
-  if (union <= 0) return 1.0;
-  return f32(matches) / f32(union);
+  if (matchedTokens == 0) return 0.0;
+  return f32(matchedTokens) / f32(w1);
 }
 
 export function cosine_sim(ptr_a: i32, ptr_b: i32, dim: i32): f32 {
@@ -120,12 +131,10 @@ export function cosine_sim(ptr_a: i32, ptr_b: i32, dim: i32): f32 {
   return f32(sim < 0.0 ? 0.0 : (sim > 1.0 ? 1.0 : sim));
 }
 
-// Static buffers matching Telegraph Go host layout
 const EMBED_DIM: i32 = 384;
-const BREAKDOWN_DIM: i32 = 5;
 
 export function embed(text_ptr: i32, text_len: i32): i32 {
-  const bufPtr = 1024; // Static buffer at offset 1024 (1536 bytes)
+  const bufPtr = 1024;
   const normVal = 1.0 / Math.sqrt(f64(EMBED_DIM));
   for (let i = 0; i < EMBED_DIM; i++) {
     store<f32>(bufPtr + (i << 2), f32(normVal));
@@ -134,7 +143,7 @@ export function embed(text_ptr: i32, text_len: i32): i32 {
 }
 
 export function breakdown_answer(q_ptr: i32, q_len: i32, gt_ptr: i32, gt_len: i32, ma_ptr: i32, ma_len: i32): i32 {
-  const bufPtr = 2560; // Static buffer for 5 floats (20 bytes)
+  const bufPtr = 2560;
   const score = rank_answer(q_ptr, q_len, gt_ptr, gt_len, ma_ptr, ma_len);
   store<f32>(bufPtr + 0, score);
   store<f32>(bufPtr + 4, score);
@@ -149,15 +158,13 @@ export function rank_answer_cached(q_vec_ptr: i32, gt_vec_ptr: i32, gt_ptr: i32,
   return bm25_score(gt_ptr, gt_len, ma_ptr, ma_len);
 }
 
-// Primary Composite Scorer Entry Point
 export function rank_answer(
   q_ptr: i32,  q_len: i32,
   gt_ptr: i32, gt_len: i32,
   ma_ptr: i32, ma_len: i32
 ): f32 {
-  if (ma_len <= 0) return 0.0;
+  if (ma_len <= 0 || gt_len <= 0) return 0.0;
 
-  // Trim whitespace check
   let hasAlpha = false;
   for (let i = 0; i < ma_len; i++) {
     if (isAlphaNum(load<u8>(ma_ptr + i))) {
@@ -167,14 +174,18 @@ export function rank_answer(
   }
   if (!hasAlpha) return 0.0;
 
-  // Self-Match (ground truth vs miner answer)
+  // Exact Self-Match (1.0000)
   if (stringsEqual(gt_ptr, gt_len, ma_ptr, ma_len)) {
     return 1.0;
   }
 
-  const lexical = bm25_score(gt_ptr, gt_len, ma_ptr, ma_len);
-  if (lexical >= 0.5) {
-    return 0.85 + (lexical - 0.5) * 0.3;
+  // Exact Substring Containment (0.9500)
+  if (containsSubstring(ma_ptr, ma_len, gt_ptr, gt_len)) {
+    return 0.95;
   }
-  return lexical * 1.5;
+
+  const lexicalRecall = bm25_score(gt_ptr, gt_len, ma_ptr, ma_len);
+  if (lexicalRecall >= 0.70) return 0.85 + (lexicalRecall - 0.70) * 0.5;
+  if (lexicalRecall >= 0.30) return 0.60 + (lexicalRecall - 0.30) * 0.6;
+  return lexicalRecall;
 }
