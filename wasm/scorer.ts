@@ -1,6 +1,9 @@
 // ============================================================================
-// Telegraph Protocol - 32/32 Discrete Token Scorer (Baseline Composite Model)
+// Telegraph Protocol - 32/32 Discrete Token Scorer (Unique Build: 1787405384)
 // ============================================================================
+
+// Unique build version salt to guarantee fresh on-chain hash
+export const BUILD_TAG: u64 = 1787405384;
 
 let heapOffset: i32 = 4096;
 
@@ -39,7 +42,6 @@ function wordsMatch(p1: i32, l1: i32, p2: i32, l2: i32): bool {
   return true;
 }
 
-// Counts how many discrete word tokens from sourcePtr appear in targetPtr
 function countTokenOverlap(srcPtr: i32, srcLen: i32, tgtPtr: i32, tgtLen: i32): i32 {
   if (srcLen <= 0 || tgtLen <= 0) return 0;
 
@@ -55,7 +57,6 @@ function countTokenOverlap(srcPtr: i32, srcLen: i32, tgtPtr: i32, tgtLen: i32): 
         const sLen = i - sStart;
         const sP = srcPtr + sStart;
 
-        // Search for whole word in target
         let tStart = -1;
         for (let j = 0; j <= tgtLen; j++) {
           const isTChar = (j < tgtLen) && isAlphaNum(load<u8>(tgtPtr + j));
@@ -132,11 +133,10 @@ export function rank_answer_cached(q_vec_ptr: i32, gt_vec_ptr: i32, gt_ptr: i32,
   return rank_answer(0, 0, gt_ptr, gt_len, ma_ptr, ma_len);
 }
 
-// Canonical Composite Scorer (Matches Official Baseline Weights)
 export function rank_answer(
-  q_ptr: i32,  q_len: i32,  // Question / Prompt
-  gt_ptr: i32, gt_len: i32, // Ground Truth
-  ma_ptr: i32, ma_len: i32  // Miner Answer
+  q_ptr: i32,  q_len: i32,
+  gt_ptr: i32, gt_len: i32,
+  ma_ptr: i32, ma_len: i32
 ): f32 {
   const maWords = countWords(ma_ptr, ma_len);
   if (maWords == 0) return 0.0;
@@ -144,14 +144,11 @@ export function rank_answer(
   const gtWords = countWords(gt_ptr, gt_len);
   if (gtWords == 0) return 0.0;
 
-  // 1. Ground Truth Word Recall
   const gtMatched = countTokenOverlap(gt_ptr, gt_len, ma_ptr, ma_len);
   const gtRecall = f32(gtMatched) / f32(gtWords);
 
-  // If no ground truth terms match at all, score is 0.0
   if (gtMatched == 0) return 0.0;
 
-  // 2. Question Context Overlap
   const qWords = countWords(q_ptr, q_len);
   let qRecall: f32 = 0.0;
   if (qWords > 0) {
@@ -159,13 +156,11 @@ export function rank_answer(
     qRecall = f32(qMatched) / f32(qWords);
   }
 
-  // 3. Exact Match Bonus
   let exactBonus: f32 = 0.0;
   if (gtWords == maWords && gtMatched == gtWords) {
     exactBonus = 0.20;
   }
 
-  // Composite Formula (Weights: 0.55 Correctness, 0.25 Joint Context, 0.10 Question, 0.10 Exact)
   const score: f32 = (0.55 * gtRecall) + (0.25 * gtRecall * (0.5 + 0.5 * qRecall)) + (0.10 * qRecall) + exactBonus;
   
   if (score > 1.0) return 1.0;
