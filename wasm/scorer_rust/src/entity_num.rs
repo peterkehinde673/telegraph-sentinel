@@ -163,7 +163,6 @@ pub fn calculate_significant_token_recall(gt_text: &str, cand_text: &str) -> f32
     let all_gt_words = extract_words(gt_text);
     let key_gt_words: Vec<&String> = all_gt_words.iter().filter(|w| !is_stopword(w.as_str())).collect();
     
-    // If all words were stopwords, fallback to full words
     let effective_gt = if key_gt_words.is_empty() {
         all_gt_words.iter().collect::<Vec<&String>>()
     } else {
@@ -181,7 +180,8 @@ pub fn calculate_significant_token_recall(gt_text: &str, cand_text: &str) -> f32
 
     let mut matched = 0;
     for &gw in &effective_gt {
-        if cand_words.iter().any(|cw| cw == gw || cw.starts_with(gw.as_str()) || gw.starts_with(cw.as_str())) {
+        // Strict whole-word equality (prevents 'solana' from falsely matching ticker 'sol')
+        if cand_words.iter().any(|cw| cw == gw) {
             matched += 1;
         }
     }
