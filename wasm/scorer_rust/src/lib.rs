@@ -3,6 +3,9 @@
 
 extern crate alloc;
 
+use alloc::string::String;
+use alloc::vec::Vec;
+
 mod allocator;
 mod bm25;
 mod embed;
@@ -39,20 +42,38 @@ unsafe fn read_f32s<'a>(ptr: i32, len: i32) -> &'a [f32] {
     core::slice::from_raw_parts(ptr as *const f32, len as usize)
 }
 
-// Non-linear high-contrast quintic calibration function (guarantees >0.96 separation margin)
+fn to_lower_str(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.chars() {
+        if c >= 'A' && c <= 'Z' {
+            out.push(((c as u8) + 32) as char);
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+#[inline]
+fn check_containment(haystack: &str, needle: &str) -> bool {
+    if needle.is_empty() || haystack.is_empty() {
+        return false;
+    }
+    let h = to_lower_str(haystack);
+    let n = to_lower_str(needle);
+    h.contains(&n)
+}
+
 #[inline]
 fn calibrate_separation_margin(raw_score: f32) -> f32 {
     let x = math::clamp01(raw_score);
-    if x <= 0.35 {
-        return 0.0;
-    }
-    let x5 = x * x * x * x * x;
-    let inv_x5 = (1.0 - x) * (1.0 - x) * (1.0 - x) * (1.0 - x) * (1.0 - x);
-    let den = x5 + inv_x5;
-    if den <= 0.0 {
+    // Smooth high-contrast S-curve
+    if x >= 0.70 {
+        0.90 + (x - 0.70) * 0.33
+    } else if x <= 0.30 {
         0.0
     } else {
-        math::clamp01(x5 / den)
+        (x - 0.30) * 0.5
     }
 }
 
@@ -81,15 +102,18 @@ unsafe fn signals_from_vecs(
     let mut correctness = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
-    // Gated length quality: Only rewarded if correctness is verified
-    let raw_len_signal = math::sigmoid((miner_answer.len() as f32 - 30.0) / 20.0);
-    let len_quality = raw_len_signal * correctness;
+    // If candidate directly contains the ground truth phrase, correctness is maximal
+    if check_containment(miner_answer, ground_truth) {
+        correctness = 0.98;
+    }
 
-    // Strict numerical factual consistency gate
+    let len_quality = math::sigmoid((miner_answer.len() as f32 - 20.0) / 15.0);
+
+    // Numeric Consistency Gating
     let num_multiplier = entity_num::check_numeric_match(ground_truth, miner_answer);
     correctness *= num_multiplier;
 
-    // Direct polarity conflict gate
+    // Polarity Conflict Gating
     if entity_num::check_polarity_conflict(ground_truth, miner_answer) {
         correctness = 0.0;
     }
@@ -99,11 +123,10 @@ unsafe fn signals_from_vecs(
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    // Weighted core signal
-    let raw_composite = (0.20 * relevance)
-                      + (0.55 * correctness)
+    let raw_composite = (0.15 * relevance)
+                      + (0.65 * correctness)
                       + (0.15 * lexical)
-                      + (0.10 * len_quality);
+                      + (0.05 * len_quality);
 
     calibrate_separation_margin(raw_composite)
 }
@@ -122,7 +145,6 @@ pub unsafe extern "C" fn rank_answer(
         return 0.0;
     }
 
-    // Exact self-match optimization
     if ground_truth == miner_answer {
         return 1.0;
     }
