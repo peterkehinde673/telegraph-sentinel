@@ -47,29 +47,17 @@ unsafe fn read_f32s<'a>(ptr: i32, len: i32) -> &'a [f32] {
     core::slice::from_raw_parts(ptr as *const f32, len as usize)
 }
 
-fn to_lower_str(s: &str) -> String {
-    let mut out = String::new();
-    for c in s.chars() {
-        if c >= 'A' && c <= 'Z' {
-            out.push(((c as u8) + 32) as char);
-        } else {
-            out.push(c);
-        }
-    }
-    out
-}
-
-// Continuous strictly monotonic contrast curve (no step-functions)
+// Smooth cubic contrast function (strictly monotonic, no step discontinuities)
 #[inline]
-fn apply_smooth_contrast(raw_score: f32) -> f32 {
+fn apply_contrast_curve(raw_score: f32) -> f32 {
     let x = math::clamp01(raw_score);
-    let x2 = x * x;
-    let inv_x2 = (1.0 - x) * (1.0 - x);
-    let den = x2 + inv_x2;
+    let x3 = x * x * x;
+    let inv_x3 = (1.0 - x) * (1.0 - x) * (1.0 - x);
+    let den = x3 + inv_x3;
     if den <= 0.0 {
         0.0
     } else {
-        math::clamp01(x2 / den)
+        math::clamp01(x3 / den)
     }
 }
 
@@ -99,21 +87,26 @@ unsafe fn signals_from_vecs(
     let semantic_sim = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
-    let num_mult = entity_num::check_numeric_consistency(ground_truth, miner_answer);
-    let entity_mult = entity_num::check_entity_mismatch(ground_truth, miner_answer);
-    let polarity_mult = entity_num::check_polarity_conflict(ground_truth, miner_answer);
+    let (num_mult, has_nums) = entity_num::check_numeric_consistency(ground_truth, miner_answer);
+    let entity_mult = entity_num::check_entity_consistency(ground_truth, miner_answer);
+    let is_polarity_conflict = entity_num::check_polarity_conflict(ground_truth, miner_answer);
+    let key_recall = entity_num::calculate_key_token_recall(ground_truth, miner_answer);
 
-    let gt_l = to_lower_str(ground_truth);
-    let ma_l = to_lower_str(miner_answer);
-    let is_exact = gt_l == ma_l || (ma_l.contains(&gt_l) && !gt_l.is_empty());
-
-    let base_correctness = if is_exact {
+    // Factual correctness synthesis:
+    let base_correctness = if has_nums && num_mult == 1.0 && entity_mult == 1.0 {
+        // Case #02 fix: Exact matching numerical facts receive full correctness credit
         0.98
+    } else if key_recall >= 0.70 && entity_mult == 1.0 && num_mult == 1.0 {
+        0.96
     } else {
         semantic_sim
     };
 
-    let correctness = base_correctness * num_mult * entity_mult * polarity_mult;
+    let mut correctness = base_correctness * num_mult * entity_mult;
+    if is_polarity_conflict {
+        correctness = 0.0;
+    }
+
     let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0) * correctness;
 
     (relevance, correctness, lexical, len_quality)
@@ -126,7 +119,7 @@ fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -
             + (W_LEXICAL * lexical)
             + (W_LENGTH * len_quality);
 
-    apply_smooth_contrast(raw)
+    apply_contrast_curve(raw)
 }
 
 #[no_mangle]
