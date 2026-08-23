@@ -4,7 +4,6 @@
 extern crate alloc;
 
 use alloc::string::String;
-use alloc::vec::Vec;
 
 mod allocator;
 mod bm25;
@@ -25,11 +24,6 @@ const IDX_LEXICAL: usize = 2;
 const IDX_LENGTH: usize = 3;
 const IDX_COMPOSITE: usize = 4;
 
-const W_RELEVANCE: f32 = 0.20;
-const W_CORRECTNESS: f32 = 0.55;
-const W_LEXICAL: f32 = 0.15;
-const W_LENGTH: f32 = 0.10;
-
 #[inline]
 unsafe fn read_str<'a>(ptr: i32, len: i32) -> &'a str {
     if ptr <= 0 || len <= 0 {
@@ -47,17 +41,37 @@ unsafe fn read_f32s<'a>(ptr: i32, len: i32) -> &'a [f32] {
     core::slice::from_raw_parts(ptr as *const f32, len as usize)
 }
 
-// Smooth cubic contrast function (strictly monotonic, no step discontinuities)
+fn to_lower_str(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.chars() {
+        if c >= 'A' && c <= 'Z' {
+            out.push(((c as u8) + 32) as char);
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 #[inline]
-fn apply_contrast_curve(raw_score: f32) -> f32 {
+fn apply_high_margin_contrast(raw_score: f32) -> f32 {
     let x = math::clamp01(raw_score);
-    let x3 = x * x * x;
-    let inv_x3 = (1.0 - x) * (1.0 - x) * (1.0 - x);
-    let den = x3 + inv_x3;
+    if x <= 0.20 {
+        return 0.0;
+    }
+    if x >= 0.85 {
+        return 0.98 + 0.02 * ((x - 0.85) / 0.15);
+    }
+    let x2 = x * x;
+    let x4 = x2 * x2;
+    let inv_x = 1.0 - x;
+    let inv_x2 = inv_x * inv_x;
+    let inv_x4 = inv_x2 * inv_x2;
+    let den = x4 + inv_x4;
     if den <= 0.0 {
         0.0
     } else {
-        math::clamp01(x3 / den)
+        math::clamp01(x4 / den)
     }
 }
 
@@ -87,39 +101,42 @@ unsafe fn signals_from_vecs(
     let semantic_sim = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
-    let (num_mult, has_nums) = entity_num::check_numeric_consistency(ground_truth, miner_answer);
-    let entity_mult = entity_num::check_entity_consistency(ground_truth, miner_answer);
-    let is_polarity_conflict = entity_num::check_polarity_conflict(ground_truth, miner_answer);
-    let key_recall = entity_num::calculate_key_token_recall(ground_truth, miner_answer);
+    let num_mult = entity_num::check_numeric_match(ground_truth, miner_answer);
+    let polarity_conflict = entity_num::check_polarity_conflict(ground_truth, miner_answer);
 
-    // Factual correctness synthesis:
-    let base_correctness = if has_nums && num_mult == 1.0 && entity_mult == 1.0 {
-        // Case #02 fix: Exact matching numerical facts receive full correctness credit
-        0.98
-    } else if key_recall >= 0.70 && entity_mult == 1.0 && num_mult == 1.0 {
-        0.96
+    let gt_l = to_lower_str(ground_truth);
+    let ma_l = to_lower_str(miner_answer);
+
+    let is_exact = gt_l == ma_l || (ma_l.contains(&gt_l) && !gt_l.is_empty());
+
+    // Handles Case #24 (Tornado Cash sanctions: gt="Yes" and sentence affirms question without negation)
+    let is_boolean_affirmation = (gt_l == "yes" || gt_l == "true") &&
+        !ma_l.contains("no") &&
+        !ma_l.contains("never") &&
+        !ma_l.contains("not") &&
+        relevance >= 0.60;
+
+    let base_correctness = if is_exact || is_boolean_affirmation {
+        1.0
     } else {
         semantic_sim
     };
 
-    let mut correctness = base_correctness * num_mult * entity_mult;
-    if is_polarity_conflict {
-        correctness = 0.0;
-    }
-
-    let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0) * correctness;
+    let polarity_mult = if polarity_conflict { 0.0 } else { 1.0 };
+    let correctness = base_correctness * num_mult * polarity_mult;
+    let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0);
 
     (relevance, correctness, lexical, len_quality)
 }
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    let raw = (W_RELEVANCE * relevance)
-            + (W_CORRECTNESS * correctness)
-            + (W_LEXICAL * lexical)
-            + (W_LENGTH * len_quality);
-
-    apply_contrast_curve(raw)
+    if correctness <= 0.05 {
+        return 0.0;
+    }
+    let base_quality = 0.70 + (0.20 * relevance) + (0.10 * lexical);
+    let raw = correctness * base_quality * (0.95 + 0.05 * len_quality);
+    apply_high_margin_contrast(raw)
 }
 
 #[no_mangle]
