@@ -87,7 +87,6 @@ unsafe fn signals_from_vecs(
     ma_vec: &[f32],
 ) -> (f32, f32, f32, f32) {
     let relevance = math::cosine(q_vec, ma_vec);
-    let cosine_correctness = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
     let key_recall = entity_num::calculate_significant_token_recall(ground_truth, miner_answer);
@@ -95,26 +94,26 @@ unsafe fn signals_from_vecs(
     let gt_lower = to_lower_str(ground_truth);
     let ma_lower = to_lower_str(miner_answer);
 
-    // Boolean affirmation check (handles Case #24: gt="Yes" with non-negative sentence)
     let is_boolean_affirmation = (gt_lower == "yes" || gt_lower == "true") &&
                                  !ma_lower.contains("no") &&
                                  !ma_lower.contains("never") &&
                                  !ma_lower.contains("not") &&
                                  relevance >= 0.65;
 
-    let mut correctness = if key_recall >= 0.99 || is_boolean_affirmation {
+    // Strict Gating: Candidate MUST contain key ground truth terms
+    let mut correctness = if key_recall >= 0.70 || is_boolean_affirmation {
         0.98
-    } else if key_recall >= 0.50 {
-        0.50 + 0.45 * key_recall
+    } else if key_recall > 0.0 {
+        0.30 * key_recall
     } else {
-        cosine_correctness * 0.15 // Strongly penalize missing key ground truth entities
+        0.0 // Zero credit if candidate misses all key ground truth entities
     };
 
-    // Strict numerical fact checking
+    // Strict numerical check
     let num_mult = entity_num::check_numeric_match(ground_truth, miner_answer);
     correctness *= num_mult;
 
-    // Polarity conflict gating
+    // Polarity contradiction check
     if entity_num::check_polarity_conflict(ground_truth, miner_answer) {
         correctness = 0.0;
     }
@@ -126,8 +125,8 @@ unsafe fn signals_from_vecs(
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    let raw_composite = (0.15 * relevance)
-                      + (0.65 * correctness)
+    let raw_composite = (0.10 * relevance)
+                      + (0.70 * correctness)
                       + (0.15 * lexical)
                       + (0.05 * len_quality);
 
