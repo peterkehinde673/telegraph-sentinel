@@ -100,14 +100,16 @@ unsafe fn signals_from_vecs(
     let relevance = math::cosine(q_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
-    let gt_support = entity_num::check_ground_truth_support(ground_truth, miner_answer);
+    let gt_nums = entity_num::parse_numbers(ground_truth);
+    let gt_has_nums = !gt_nums.is_empty();
+    let num_mult = entity_num::check_numeric_match(ground_truth, miner_answer);
     let polarity_conflict = entity_num::check_polarity_conflict(ground_truth, miner_answer);
 
     let gt_l = to_lower_str(ground_truth);
     let ma_l = to_lower_str(miner_answer);
 
-    // Exact full-string equality
     let is_exact = gt_l == ma_l;
+    let contains_key_tokens = entity_num::check_key_token_containment(ground_truth, miner_answer);
 
     let is_boolean_affirmation = (gt_l == "yes" || gt_l == "true") &&
         !ma_l.contains("no") &&
@@ -115,10 +117,14 @@ unsafe fn signals_from_vecs(
         !ma_l.contains("not") &&
         relevance >= 0.60;
 
-    let base_correctness = if is_exact || is_boolean_affirmation || gt_support >= 0.99 {
-        1.0
+    let base_correctness = if gt_has_nums {
+        if num_mult == 1.0 { 0.98 } else { 0.0 }
     } else {
-        0.0
+        if is_exact || contains_key_tokens || is_boolean_affirmation {
+            0.98
+        } else {
+            0.0 // Reject bad entity substitutions (e.g. ADA vs SOL, Charlie Lee vs Satoshi)
+        }
     };
 
     let polarity_mult = if polarity_conflict { 0.0 } else { 1.0 };
