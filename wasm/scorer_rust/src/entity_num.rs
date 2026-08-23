@@ -2,12 +2,6 @@
 use alloc::vec::Vec;
 use alloc::string::String;
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum TokenKind {
-    Word(String),
-    Number(String),
-}
-
 fn is_digit(c: char) -> bool {
     c >= '0' && c <= '9'
 }
@@ -16,7 +10,7 @@ fn is_alpha(c: char) -> bool {
     (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z')
 }
 
-fn to_lower_char(c: char) -> char {
+fn to_lower(c: char) -> char {
     if c >= 'A' && c <= 'Z' {
         ((c as u8) + 32) as char
     } else {
@@ -24,79 +18,97 @@ fn to_lower_char(c: char) -> char {
     }
 }
 
-pub fn extract_tokens(text: &str) -> Vec<TokenKind> {
-    let mut tokens = Vec::new();
+pub fn parse_numbers(text: &str) -> Vec<f64> {
+    let mut nums = Vec::new();
     let chars: Vec<char> = text.chars().collect();
     let mut i = 0;
 
     while i < chars.len() {
-        let c = chars[i];
-        if is_digit(c) || c == '$' || c == '€' || c == '£' {
+        if is_digit(chars[i]) || (chars[i] == '.' && i + 1 < chars.len() && is_digit(chars[i + 1])) {
             let mut num_str = String::new();
-            while i < chars.len() && (is_digit(chars[i]) || chars[i] == '.' || chars[i] == ',' || chars[i] == '$' || chars[i] == '%' || chars[i] == '€') {
-                if chars[i] != ',' && chars[i] != '$' && chars[i] != '€' {
-                    num_str.push(chars[i]);
+            while i < chars.len() && (is_digit(chars[i]) || chars[i] == '.') {
+                num_str.push(chars[i]);
+                i += 1;
+            }
+
+            // Check for units / multipliers (k, m, b, million, billion)
+            let mut multiplier = 1.0;
+            let mut j = i;
+            while j < chars.len() && chars[j] == ' ' { j += 1; }
+            if j < chars.len() {
+                let lower_c = to_lower(chars[j]);
+                if lower_c == 'm' || (j + 6 < chars.len() && &text[j..j+7].to_lowercase() == "million") {
+                    multiplier = 1_000_000.0;
+                } else if lower_c == 'b' || (j + 6 < chars.len() && &text[j..j+7].to_lowercase() == "billion") {
+                    multiplier = 1_000_000_000.0;
+                } else if lower_c == 'k' {
+                    multiplier = 1_000.0;
                 }
-                i += 1;
             }
-            if !num_str.is_empty() {
-                tokens.push(TokenKind::Number(num_str));
+
+            // Custom float parser (no_std compatible)
+            let mut val = 0.0;
+            let mut decimal = false;
+            let mut div = 1.0;
+
+            for ch in num_str.chars() {
+                if ch == '.' {
+                    decimal = true;
+                } else if is_digit(ch) {
+                    let d = (ch as u8 - b'0') as f64;
+                    if !decimal {
+                        val = val * 10.0 + d;
+                    } else {
+                        div *= 10.0;
+                        val += d / div;
+                    }
+                }
             }
-        } else if is_alpha(c) {
-            let mut word = String::new();
-            while i < chars.len() && (is_alpha(chars[i]) || is_digit(chars[i])) {
-                word.push(to_lower_char(chars[i]));
-                i += 1;
-            }
-            if !word.is_empty() {
-                tokens.push(TokenKind::Word(word));
-            }
+            nums.push(val * multiplier);
         } else {
             i += 1;
         }
     }
-    tokens
+    nums
 }
 
-pub fn check_numerical_consistency(gt_text: &str, cand_text: &str) -> f32 {
-    let gt_tokens = extract_tokens(gt_text);
-    let cand_tokens = extract_tokens(cand_text);
-
-    let gt_numbers: Vec<&String> = gt_tokens.iter().filter_map(|t| match t {
-        TokenKind::Number(n) => Some(n),
-        _ => None,
-    }).collect();
-
-    if gt_numbers.is_empty() {
-        return 1.0; // No numbers to verify
+pub fn check_numeric_match(gt_text: &str, cand_text: &str) -> f32 {
+    let gt_nums = parse_numbers(gt_text);
+    if gt_nums.is_empty() {
+        return 1.0; // No numbers to gate
     }
 
-    let cand_numbers: Vec<&String> = cand_tokens.iter().filter_map(|t| match t {
-        TokenKind::Number(n) => Some(n),
-        _ => None,
-    }).collect();
-
-    if cand_numbers.is_empty() {
-        return 0.2; // Missing required numerical values
+    let cand_nums = parse_numbers(cand_text);
+    if cand_nums.is_empty() {
+        return 0.05; // Missing required numerical value
     }
 
-    let mut matched = 0;
-    for gn in &gt_numbers {
-        if cand_numbers.iter().any(|cn| cn == gn || cn.starts_with(gn.as_str()) || gn.starts_with(cn.as_str())) {
-            matched += 1;
+    let mut all_matched = true;
+    for &gn in &gt_nums {
+        let mut found = false;
+        for &cn in &cand_nums {
+            let diff = if gn > cn { gn - cn } else { cn - gn };
+            let max_val = if gn > cn { gn } else { cn };
+            let rel_diff = if max_val > 0.0 { diff / max_val } else { diff };
+            if rel_diff <= 0.01 { // 1% tolerance
+                found = true;
+                break;
+            }
+        }
+        if !found {
+            all_matched = false;
+            break;
         }
     }
 
-    if matched == gt_numbers.len() {
+    if all_matched {
         1.0
-    } else if matched > 0 {
-        0.5
     } else {
-        0.0 // Contradicting or completely mismatched numbers
+        0.0 // Strong penalty for contradictory numerical claims
     }
 }
 
-pub fn check_contradiction(gt_text: &str, cand_text: &str) -> bool {
+pub fn check_polarity_conflict(gt_text: &str, cand_text: &str) -> bool {
     let pairs = [
         ("yes", "no"),
         ("true", "false"),
@@ -104,12 +116,14 @@ pub fn check_contradiction(gt_text: &str, cand_text: &str) -> bool {
         ("higher", "lower"),
         ("increase", "decrease"),
         ("bullish", "bearish"),
+        ("passed", "rejected"),
+        ("passed", "failed"),
         ("approved", "rejected"),
         ("success", "failed"),
     ];
 
-    let gt_lower: String = gt_text.chars().map(to_lower_char).collect();
-    let cand_lower: String = cand_text.chars().map(to_lower_char).collect();
+    let gt_lower: String = gt_text.chars().map(to_lower).collect();
+    let cand_lower: String = cand_text.chars().map(to_lower).collect();
 
     for (pos, neg) in pairs {
         let gt_has_pos = gt_lower.contains(pos);
@@ -119,7 +133,7 @@ pub fn check_contradiction(gt_text: &str, cand_text: &str) -> bool {
 
         if (gt_has_pos && !gt_has_neg && cand_has_neg && !cand_has_pos) ||
            (gt_has_neg && !gt_has_pos && cand_has_pos && !cand_has_neg) {
-            return true; // Direct polarity conflict
+            return true;
         }
     }
     false

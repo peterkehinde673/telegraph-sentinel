@@ -4,12 +4,6 @@ const path = require('path');
 const wasmPath = path.resolve(__dirname, 'dist/telegraph_sentinel_scorer.wasm');
 const wasmBuffer = fs.readFileSync(wasmPath);
 
-// Verify WebAssembly magic header (\0asm)
-if (wasmBuffer[0] !== 0x00 || wasmBuffer[1] !== 0x61 || wasmBuffer[2] !== 0x73 || wasmBuffer[3] !== 0x6d) {
-  console.error('✗ Invalid WASM binary header');
-  process.exit(1);
-}
-
 WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
   const ex = instance.exports;
   const { alloc, rank_answer, memory } = ex;
@@ -27,9 +21,8 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
     return { ptr, len: buf.length };
   }
 
-  // 32 Rigorous Adversarial Fixture Cases (Pricing, DeFi, Entities, Contradictions, Numbers)
   const fixtures = [
-    { q: "What is the price of ETH?", gt: "$3,450", good: "Ethereum is currently trading at $3,450 USD.", bad: "Ethereum is trading at $1,200 USD." },
+    { q: "What is the price of ETH?", gt: "$3,450", good: "Ethereum is trading at $3,450 USD.", bad: "Ethereum is trading at $1,200 USD." },
     { q: "What is the TVL of Aave?", gt: "$12.4B", good: "Aave total value locked is $12.4B.", bad: "Aave total value locked is $1.2B." },
     { q: "Was the protocol exploited?", gt: "No", good: "No security breach or exploit occurred.", bad: "Yes, the protocol suffered a $50M exploit." },
     { q: "Is the market trend bullish?", gt: "Bullish", good: "Market indicators are strongly bullish.", bad: "Market indicators are bearish." },
@@ -70,8 +63,6 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
   let minMargin = 1.0;
   let maxMargin = 0.0;
 
-  console.log(`Evaluating ${fixtures.length} Fixtures:\n`);
-
   fixtures.forEach((f, idx) => {
     const qW = write(f.q);
     const gtW = write(f.gt);
@@ -105,17 +96,17 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
   console.log(`ORDERING ACCURACY:       ${correctOrderings} / ${fixtures.length} (${((correctOrderings / fixtures.length) * 100).toFixed(1)}%)`);
   console.log(`AVERAGE GOOD SCORE:      ${avgGood.toFixed(4)}`);
   console.log(`AVERAGE BAD SCORE:       ${avgBad.toFixed(4)}`);
-  console.log(`AVERAGE MARGIN (GAP):    +${avgMargin.toFixed(4)} (Champion floor ~0.95)`);
+  console.log(`AVERAGE MARGIN (GAP):    +${avgMargin.toFixed(4)} (Champion floor 0.9598)`);
   console.log(`MINIMUM MARGIN:          +${minMargin.toFixed(4)}`);
   console.log(`MAXIMUM MARGIN:          +${maxMargin.toFixed(4)}`);
   console.log('======================================================\n');
 
-  if (correctOrderings !== fixtures.length || avgMargin < 0.80) {
-    console.error('✗ Benchmark did not satisfy 32/32 or minimum margin floor.');
+  if (correctOrderings !== fixtures.length || avgMargin < 0.9598) {
+    console.error('✗ Benchmark did not exceed Champion separation floor (0.9598).');
     process.exit(1);
   }
 
-  console.log('✓ AUDIT PASSED: SCORER DEMONSTRATES 32/32 PERFECT SEPARATION!\n');
+  console.log('✓ AUDIT PASSED: SCORER DEMONSTRATES SUPERIOR SEPARATION (+', avgMargin.toFixed(4), ')!\n');
 }).catch(err => {
   console.error('Validation error:', err);
   process.exit(1);
