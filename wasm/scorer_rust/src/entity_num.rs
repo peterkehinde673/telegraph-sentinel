@@ -31,7 +31,6 @@ pub fn parse_numbers(text: &str) -> Vec<f64> {
                 i += 1;
             }
 
-            // Check for units / multipliers (k, m, b, million, billion)
             let mut multiplier = 1.0;
             let mut j = i;
             while j < chars.len() && chars[j] == ' ' { j += 1; }
@@ -46,7 +45,6 @@ pub fn parse_numbers(text: &str) -> Vec<f64> {
                 }
             }
 
-            // Custom float parser (no_std compatible)
             let mut val = 0.0;
             let mut decimal = false;
             let mut div = 1.0;
@@ -75,12 +73,12 @@ pub fn parse_numbers(text: &str) -> Vec<f64> {
 pub fn check_numeric_match(gt_text: &str, cand_text: &str) -> f32 {
     let gt_nums = parse_numbers(gt_text);
     if gt_nums.is_empty() {
-        return 1.0; // No numbers to gate
+        return 1.0;
     }
 
     let cand_nums = parse_numbers(cand_text);
     if cand_nums.is_empty() {
-        return 0.05; // Missing required numerical value
+        return 0.0;
     }
 
     let mut all_matched = true;
@@ -90,7 +88,7 @@ pub fn check_numeric_match(gt_text: &str, cand_text: &str) -> f32 {
             let diff = if gn > cn { gn - cn } else { cn - gn };
             let max_val = if gn > cn { gn } else { cn };
             let rel_diff = if max_val > 0.0 { diff / max_val } else { diff };
-            if rel_diff <= 0.01 { // 1% tolerance
+            if rel_diff <= 0.01 {
                 found = true;
                 break;
             }
@@ -101,11 +99,7 @@ pub fn check_numeric_match(gt_text: &str, cand_text: &str) -> f32 {
         }
     }
 
-    if all_matched {
-        1.0
-    } else {
-        0.0 // Strong penalty for contradictory numerical claims
-    }
+    if all_matched { 1.0 } else { 0.0 }
 }
 
 pub fn check_polarity_conflict(gt_text: &str, cand_text: &str) -> bool {
@@ -137,4 +131,46 @@ pub fn check_polarity_conflict(gt_text: &str, cand_text: &str) -> bool {
         }
     }
     false
+}
+
+pub fn extract_words(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        if is_alpha(chars[i]) || is_digit(chars[i]) {
+            let mut w = String::new();
+            while i < chars.len() && (is_alpha(chars[i]) || is_digit(chars[i])) {
+                w.push(to_lower(chars[i]));
+                i += 1;
+            }
+            if !w.is_empty() {
+                words.push(w);
+            }
+        } else {
+            i += 1;
+        }
+    }
+    words
+}
+
+pub fn calculate_token_recall(gt_text: &str, cand_text: &str) -> f32 {
+    let gt_words = extract_words(gt_text);
+    if gt_words.is_empty() {
+        return 1.0;
+    }
+    let cand_words = extract_words(cand_text);
+    if cand_words.is_empty() {
+        return 0.0;
+    }
+
+    let mut matched = 0;
+    for gw in &gt_words {
+        if cand_words.contains(gw) {
+            matched += 1;
+        }
+    }
+
+    (matched as f32) / (gt_words.len() as f32)
 }

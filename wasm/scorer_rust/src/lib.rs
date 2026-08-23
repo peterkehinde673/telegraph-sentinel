@@ -3,9 +3,6 @@
 
 extern crate alloc;
 
-use alloc::string::String;
-use alloc::vec::Vec;
-
 mod allocator;
 mod bm25;
 mod embed;
@@ -42,38 +39,15 @@ unsafe fn read_f32s<'a>(ptr: i32, len: i32) -> &'a [f32] {
     core::slice::from_raw_parts(ptr as *const f32, len as usize)
 }
 
-fn to_lower_str(s: &str) -> String {
-    let mut out = String::new();
-    for c in s.chars() {
-        if c >= 'A' && c <= 'Z' {
-            out.push(((c as u8) + 32) as char);
-        } else {
-            out.push(c);
-        }
-    }
-    out
-}
-
-#[inline]
-fn check_containment(haystack: &str, needle: &str) -> bool {
-    if needle.is_empty() || haystack.is_empty() {
-        return false;
-    }
-    let h = to_lower_str(haystack);
-    let n = to_lower_str(needle);
-    h.contains(&n)
-}
-
 #[inline]
 fn calibrate_separation_margin(raw_score: f32) -> f32 {
     let x = math::clamp01(raw_score);
-    // Smooth high-contrast S-curve
-    if x >= 0.70 {
-        0.90 + (x - 0.70) * 0.33
-    } else if x <= 0.30 {
-        0.0
+    if x >= 0.45 {
+        // High confidence scaling for verified good answers -> 0.94 - 0.99
+        0.94 + 0.05 * ((x - 0.45) / 0.55)
     } else {
-        (x - 0.30) * 0.5
+        // Suppress wrong/contradicting answers -> 0.00
+        0.0
     }
 }
 
@@ -99,24 +73,30 @@ unsafe fn signals_from_vecs(
     ma_vec: &[f32],
 ) -> (f32, f32, f32, f32) {
     let relevance = math::cosine(q_vec, ma_vec);
-    let mut correctness = math::cosine(gt_vec, ma_vec);
+    let cosine_correctness = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
-    // If candidate directly contains the ground truth phrase, correctness is maximal
-    if check_containment(miner_answer, ground_truth) {
-        correctness = 0.98;
-    }
+    // Compute token recall of ground-truth in candidate answer
+    let token_recall = entity_num::calculate_token_recall(ground_truth, miner_answer);
 
-    let len_quality = math::sigmoid((miner_answer.len() as f32 - 20.0) / 15.0);
+    let mut correctness = if token_recall >= 0.50 {
+        0.95
+    } else if token_recall > 0.0 {
+        0.60 + 0.35 * token_recall
+    } else {
+        cosine_correctness * 0.30
+    };
 
-    // Numeric Consistency Gating
-    let num_multiplier = entity_num::check_numeric_match(ground_truth, miner_answer);
-    correctness *= num_multiplier;
+    // Strict numerical check
+    let num_mult = entity_num::check_numeric_match(ground_truth, miner_answer);
+    correctness *= num_mult;
 
-    // Polarity Conflict Gating
+    // Polarity contradiction gate
     if entity_num::check_polarity_conflict(ground_truth, miner_answer) {
         correctness = 0.0;
     }
+
+    let len_quality = if correctness > 0.0 { 0.95 } else { 0.0 };
 
     (relevance, correctness, lexical, len_quality)
 }
