@@ -18,10 +18,6 @@ fn to_lower(c: char) -> char {
     }
 }
 
-pub fn is_stopword(w: &str) -> bool {
-    matches!(w, "the" | "a" | "an" | "of" | "in" | "on" | "at" | "to" | "for" | "with" | "by" | "is" | "are" | "was" | "were" | "it" | "and" | "or" | "as")
-}
-
 pub fn parse_numbers(text: &str) -> Vec<f64> {
     let mut nums = Vec::new();
     let chars: Vec<char> = text.chars().collect();
@@ -74,7 +70,7 @@ pub fn parse_numbers(text: &str) -> Vec<f64> {
     nums
 }
 
-pub fn check_numeric_match(gt_text: &str, cand_text: &str) -> f32 {
+pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
     let gt_nums = parse_numbers(gt_text);
     if gt_nums.is_empty() {
         return 1.0;
@@ -82,31 +78,66 @@ pub fn check_numeric_match(gt_text: &str, cand_text: &str) -> f32 {
 
     let cand_nums = parse_numbers(cand_text);
     if cand_nums.is_empty() {
-        return 0.0;
+        return 0.20;
     }
 
-    let mut all_matched = true;
+    let mut matched_count = 0;
     for &gn in &gt_nums {
         let mut found = false;
         for &cn in &cand_nums {
             let diff = if gn > cn { gn - cn } else { cn - gn };
             let max_val = if gn > cn { gn } else { cn };
             let rel_diff = if max_val > 0.0 { diff / max_val } else { diff };
-            if rel_diff <= 0.01 {
+            if rel_diff <= 0.015 { // 1.5% numerical tolerance
                 found = true;
                 break;
             }
         }
-        if !found {
-            all_matched = false;
-            break;
+        if found {
+            matched_count += 1;
         }
     }
 
-    if all_matched { 1.0 } else { 0.0 }
+    if matched_count == gt_nums.len() {
+        1.0
+    } else if matched_count > 0 {
+        0.50
+    } else {
+        0.05 // Severe penalty for contradictory numeric claim
+    }
 }
 
-pub fn check_polarity_conflict(gt_text: &str, cand_text: &str) -> bool {
+pub fn check_entity_mismatch(gt_text: &str, cand_text: &str) -> f32 {
+    let tickers = ["btc", "eth", "sol", "arb", "op", "aave", "mkr", "uni", "link", "usdt", "usdc", "steth"];
+    let gt_lower: String = gt_text.chars().map(to_lower).collect();
+    let cand_lower: String = cand_text.chars().map(to_lower).collect();
+
+    let mut gt_tickers = Vec::new();
+    for &t in &tickers {
+        if gt_lower.contains(t) {
+            gt_tickers.push(t);
+        }
+    }
+
+    if gt_tickers.is_empty() {
+        return 1.0;
+    }
+
+    for t in &gt_tickers {
+        if !cand_lower.contains(t) {
+            // Check if candidate contains a competing ticker instead
+            for &comp in &tickers {
+                if comp != *t && cand_lower.contains(comp) {
+                    return 0.10; // Substituted wrong token/entity
+                }
+            }
+            return 0.30;
+        }
+    }
+    1.0
+}
+
+pub fn check_polarity_conflict(gt_text: &str, cand_text: &str) -> f32 {
     let pairs = [
         ("yes", "no"),
         ("true", "false"),
@@ -131,60 +162,8 @@ pub fn check_polarity_conflict(gt_text: &str, cand_text: &str) -> bool {
 
         if (gt_has_pos && !gt_has_neg && cand_has_neg && !cand_has_pos) ||
            (gt_has_neg && !gt_has_pos && cand_has_pos && !cand_has_neg) {
-            return true;
+            return 0.05; // Polarity inversion penalty
         }
     }
-    false
-}
-
-pub fn extract_words(text: &str) -> Vec<String> {
-    let mut words = Vec::new();
-    let chars: Vec<char> = text.chars().collect();
-    let mut i = 0;
-
-    while i < chars.len() {
-        if is_alpha(chars[i]) || is_digit(chars[i]) {
-            let mut w = String::new();
-            while i < chars.len() && (is_alpha(chars[i]) || is_digit(chars[i])) {
-                w.push(to_lower(chars[i]));
-                i += 1;
-            }
-            if !w.is_empty() {
-                words.push(w);
-            }
-        } else {
-            i += 1;
-        }
-    }
-    words
-}
-
-pub fn calculate_significant_token_recall(gt_text: &str, cand_text: &str) -> f32 {
-    let all_gt_words = extract_words(gt_text);
-    let key_gt_words: Vec<&String> = all_gt_words.iter().filter(|w| !is_stopword(w.as_str())).collect();
-    
-    let effective_gt = if key_gt_words.is_empty() {
-        all_gt_words.iter().collect::<Vec<&String>>()
-    } else {
-        key_gt_words
-    };
-
-    if effective_gt.is_empty() {
-        return 1.0;
-    }
-
-    let cand_words = extract_words(cand_text);
-    if cand_words.is_empty() {
-        return 0.0;
-    }
-
-    let mut matched = 0;
-    for &gw in &effective_gt {
-        // Strict whole-word equality (prevents 'solana' from falsely matching ticker 'sol')
-        if cand_words.iter().any(|cw| cw == gw) {
-            matched += 1;
-        }
-    }
-
-    (matched as f32) / (effective_gt.len() as f32)
+    1.0
 }

@@ -25,6 +25,11 @@ const IDX_LEXICAL: usize = 2;
 const IDX_LENGTH: usize = 3;
 const IDX_COMPOSITE: usize = 4;
 
+const W_RELEVANCE: f32 = 0.20;
+const W_CORRECTNESS: f32 = 0.55;
+const W_LEXICAL: f32 = 0.15;
+const W_LENGTH: f32 = 0.10;
+
 #[inline]
 unsafe fn read_str<'a>(ptr: i32, len: i32) -> &'a str {
     if ptr <= 0 || len <= 0 {
@@ -54,13 +59,17 @@ fn to_lower_str(s: &str) -> String {
     out
 }
 
+// Continuous strictly monotonic contrast curve (no step-functions)
 #[inline]
-fn calibrate_separation_margin(raw_score: f32) -> f32 {
+fn apply_smooth_contrast(raw_score: f32) -> f32 {
     let x = math::clamp01(raw_score);
-    if x >= 0.45 {
-        0.94 + 0.05 * ((x - 0.45) / 0.55)
-    } else {
+    let x2 = x * x;
+    let inv_x2 = (1.0 - x) * (1.0 - x);
+    let den = x2 + inv_x2;
+    if den <= 0.0 {
         0.0
+    } else {
+        math::clamp01(x2 / den)
     }
 }
 
@@ -81,56 +90,43 @@ unsafe fn compute_signals(question: &str, ground_truth: &str, miner_answer: &str
 unsafe fn signals_from_vecs(
     q_vec: &[f32],
     gt_vec: &[f32],
-    question: &str,
+    _question: &str,
     ground_truth: &str,
     miner_answer: &str,
     ma_vec: &[f32],
 ) -> (f32, f32, f32, f32) {
     let relevance = math::cosine(q_vec, ma_vec);
+    let semantic_sim = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
-    let key_recall = entity_num::calculate_significant_token_recall(ground_truth, miner_answer);
+    let num_mult = entity_num::check_numeric_consistency(ground_truth, miner_answer);
+    let entity_mult = entity_num::check_entity_mismatch(ground_truth, miner_answer);
+    let polarity_mult = entity_num::check_polarity_conflict(ground_truth, miner_answer);
 
-    let gt_lower = to_lower_str(ground_truth);
-    let ma_lower = to_lower_str(miner_answer);
+    let gt_l = to_lower_str(ground_truth);
+    let ma_l = to_lower_str(miner_answer);
+    let is_exact = gt_l == ma_l || (ma_l.contains(&gt_l) && !gt_l.is_empty());
 
-    let is_boolean_affirmation = (gt_lower == "yes" || gt_lower == "true") &&
-                                 !ma_lower.contains("no") &&
-                                 !ma_lower.contains("never") &&
-                                 !ma_lower.contains("not") &&
-                                 relevance >= 0.65;
-
-    // Strict Gating: Candidate MUST contain key ground truth terms
-    let mut correctness = if key_recall >= 0.70 || is_boolean_affirmation {
+    let base_correctness = if is_exact {
         0.98
-    } else if key_recall > 0.0 {
-        0.30 * key_recall
     } else {
-        0.0 // Zero credit if candidate misses all key ground truth entities
+        semantic_sim
     };
 
-    // Strict numerical check
-    let num_mult = entity_num::check_numeric_match(ground_truth, miner_answer);
-    correctness *= num_mult;
-
-    // Polarity contradiction check
-    if entity_num::check_polarity_conflict(ground_truth, miner_answer) {
-        correctness = 0.0;
-    }
-
-    let len_quality = if correctness > 0.0 { 0.95 } else { 0.0 };
+    let correctness = base_correctness * num_mult * entity_mult * polarity_mult;
+    let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0) * correctness;
 
     (relevance, correctness, lexical, len_quality)
 }
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    let raw_composite = (0.10 * relevance)
-                      + (0.70 * correctness)
-                      + (0.15 * lexical)
-                      + (0.05 * len_quality);
+    let raw = (W_RELEVANCE * relevance)
+            + (W_CORRECTNESS * correctness)
+            + (W_LEXICAL * lexical)
+            + (W_LENGTH * len_quality);
 
-    calibrate_separation_margin(raw_composite)
+    apply_smooth_contrast(raw)
 }
 
 #[no_mangle]
@@ -147,7 +143,7 @@ pub unsafe extern "C" fn rank_answer(
         return 0.0;
     }
 
-    if ground_truth == miner_answer {
+    if ground_truth.trim() == miner_answer.trim() {
         return 1.0;
     }
 
@@ -167,6 +163,10 @@ pub unsafe extern "C" fn rank_answer_cached(
 
     if miner_answer.trim().is_empty() || ground_truth.trim().is_empty() {
         return 0.0;
+    }
+
+    if ground_truth.trim() == miner_answer.trim() {
+        return 1.0;
     }
 
     let q_vec = read_f32s(q_vec_ptr, EMBED_DIM as i32);
