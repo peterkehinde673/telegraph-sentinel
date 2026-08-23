@@ -18,6 +18,10 @@ fn to_lower(c: char) -> char {
     }
 }
 
+pub fn is_stopword(w: &str) -> bool {
+    matches!(w, "the" | "a" | "an" | "of" | "in" | "on" | "at" | "to" | "for" | "with" | "by" | "is" | "are" | "was" | "were" | "it" | "and" | "or" | "as")
+}
+
 pub fn parse_numbers(text: &str) -> Vec<f64> {
     let mut nums = Vec::new();
     let chars: Vec<char> = text.chars().collect();
@@ -155,22 +159,32 @@ pub fn extract_words(text: &str) -> Vec<String> {
     words
 }
 
-pub fn calculate_token_recall(gt_text: &str, cand_text: &str) -> f32 {
-    let gt_words = extract_words(gt_text);
-    if gt_words.is_empty() {
+pub fn calculate_significant_token_recall(gt_text: &str, cand_text: &str) -> f32 {
+    let all_gt_words = extract_words(gt_text);
+    let key_gt_words: Vec<&String> = all_gt_words.iter().filter(|w| !is_stopword(w.as_str())).collect();
+    
+    // If all words were stopwords, fallback to full words
+    let effective_gt = if key_gt_words.is_empty() {
+        all_gt_words.iter().collect::<Vec<&String>>()
+    } else {
+        key_gt_words
+    };
+
+    if effective_gt.is_empty() {
         return 1.0;
     }
+
     let cand_words = extract_words(cand_text);
     if cand_words.is_empty() {
         return 0.0;
     }
 
     let mut matched = 0;
-    for gw in &gt_words {
-        if cand_words.contains(gw) {
+    for &gw in &effective_gt {
+        if cand_words.iter().any(|cw| cw == gw || cw.starts_with(gw.as_str()) || gw.starts_with(cw.as_str())) {
             matched += 1;
         }
     }
 
-    (matched as f32) / (gt_words.len() as f32)
+    (matched as f32) / (effective_gt.len() as f32)
 }

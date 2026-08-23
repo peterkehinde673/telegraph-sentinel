@@ -3,6 +3,9 @@
 
 extern crate alloc;
 
+use alloc::string::String;
+use alloc::vec::Vec;
+
 mod allocator;
 mod bm25;
 mod embed;
@@ -39,14 +42,24 @@ unsafe fn read_f32s<'a>(ptr: i32, len: i32) -> &'a [f32] {
     core::slice::from_raw_parts(ptr as *const f32, len as usize)
 }
 
+fn to_lower_str(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.chars() {
+        if c >= 'A' && c <= 'Z' {
+            out.push(((c as u8) + 32) as char);
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 #[inline]
 fn calibrate_separation_margin(raw_score: f32) -> f32 {
     let x = math::clamp01(raw_score);
     if x >= 0.45 {
-        // High confidence scaling for verified good answers -> 0.94 - 0.99
         0.94 + 0.05 * ((x - 0.45) / 0.55)
     } else {
-        // Suppress wrong/contradicting answers -> 0.00
         0.0
     }
 }
@@ -61,13 +74,14 @@ unsafe fn compute_signals(question: &str, ground_truth: &str, miner_answer: &str
     let gt_vec = embed::run(&gt_enc);
     let ma_vec = embed::run(&ma_enc);
 
-    signals_from_vecs(&q_vec, &gt_vec, ground_truth, miner_answer, &ma_vec)
+    signals_from_vecs(&q_vec, &gt_vec, question, ground_truth, miner_answer, &ma_vec)
 }
 
 #[inline]
 unsafe fn signals_from_vecs(
     q_vec: &[f32],
     gt_vec: &[f32],
+    question: &str,
     ground_truth: &str,
     miner_answer: &str,
     ma_vec: &[f32],
@@ -76,22 +90,31 @@ unsafe fn signals_from_vecs(
     let cosine_correctness = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
-    // Compute token recall of ground-truth in candidate answer
-    let token_recall = entity_num::calculate_token_recall(ground_truth, miner_answer);
+    let key_recall = entity_num::calculate_significant_token_recall(ground_truth, miner_answer);
 
-    let mut correctness = if token_recall >= 0.50 {
-        0.95
-    } else if token_recall > 0.0 {
-        0.60 + 0.35 * token_recall
+    let gt_lower = to_lower_str(ground_truth);
+    let ma_lower = to_lower_str(miner_answer);
+
+    // Boolean affirmation check (handles Case #24: gt="Yes" with non-negative sentence)
+    let is_boolean_affirmation = (gt_lower == "yes" || gt_lower == "true") &&
+                                 !ma_lower.contains("no") &&
+                                 !ma_lower.contains("never") &&
+                                 !ma_lower.contains("not") &&
+                                 relevance >= 0.65;
+
+    let mut correctness = if key_recall >= 0.99 || is_boolean_affirmation {
+        0.98
+    } else if key_recall >= 0.50 {
+        0.50 + 0.45 * key_recall
     } else {
-        cosine_correctness * 0.30
+        cosine_correctness * 0.15 // Strongly penalize missing key ground truth entities
     };
 
-    // Strict numerical check
+    // Strict numerical fact checking
     let num_mult = entity_num::check_numeric_match(ground_truth, miner_answer);
     correctness *= num_mult;
 
-    // Polarity contradiction gate
+    // Polarity conflict gating
     if entity_num::check_polarity_conflict(ground_truth, miner_answer) {
         correctness = 0.0;
     }
@@ -154,7 +177,7 @@ pub unsafe extern "C" fn rank_answer_cached(
     let ma_vec = embed::run(&ma_enc);
 
     let (relevance, correctness, lexical, len_quality) =
-        signals_from_vecs(q_vec, gt_vec, ground_truth, miner_answer, &ma_vec);
+        signals_from_vecs(q_vec, gt_vec, "", ground_truth, miner_answer, &ma_vec);
 
     composite(relevance, correctness, lexical, len_quality)
 }
