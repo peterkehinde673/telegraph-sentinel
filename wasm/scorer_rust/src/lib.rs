@@ -56,7 +56,7 @@ fn to_lower_str(s: &str) -> String {
 #[inline]
 fn apply_high_margin_contrast(raw_score: f32) -> f32 {
     let x = math::clamp01(raw_score);
-    if x <= 0.20 {
+    if x <= 0.15 {
         return 0.0;
     }
     if x >= 0.85 {
@@ -98,32 +98,31 @@ unsafe fn signals_from_vecs(
     ma_vec: &[f32],
 ) -> (f32, f32, f32, f32) {
     let relevance = math::cosine(q_vec, ma_vec);
-    let semantic_sim = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
-    let num_mult = entity_num::check_numeric_match(ground_truth, miner_answer);
+    let gt_support = entity_num::check_ground_truth_support(ground_truth, miner_answer);
     let polarity_conflict = entity_num::check_polarity_conflict(ground_truth, miner_answer);
 
     let gt_l = to_lower_str(ground_truth);
     let ma_l = to_lower_str(miner_answer);
 
-    let is_exact = gt_l == ma_l || (ma_l.contains(&gt_l) && !gt_l.is_empty());
+    // Exact full-string equality
+    let is_exact = gt_l == ma_l;
 
-    // Handles Case #24 (Tornado Cash sanctions: gt="Yes" and sentence affirms question without negation)
     let is_boolean_affirmation = (gt_l == "yes" || gt_l == "true") &&
         !ma_l.contains("no") &&
         !ma_l.contains("never") &&
         !ma_l.contains("not") &&
         relevance >= 0.60;
 
-    let base_correctness = if is_exact || is_boolean_affirmation {
+    let base_correctness = if is_exact || is_boolean_affirmation || gt_support >= 0.99 {
         1.0
     } else {
-        semantic_sim
+        0.0
     };
 
     let polarity_mult = if polarity_conflict { 0.0 } else { 1.0 };
-    let correctness = base_correctness * num_mult * polarity_mult;
+    let correctness = base_correctness * polarity_mult;
     let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0);
 
     (relevance, correctness, lexical, len_quality)

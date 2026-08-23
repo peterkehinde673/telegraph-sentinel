@@ -17,6 +17,10 @@ fn to_lower(c: char) -> char {
     }
 }
 
+pub fn is_stopword(w: &str) -> bool {
+    matches!(w, "the" | "a" | "an" | "of" | "in" | "on" | "at" | "to" | "for" | "with" | "by" | "is" | "are" | "was" | "were" | "it" | "and" | "or" | "as" | "what" | "who" | "did" | "which")
+}
+
 pub fn parse_numbers(text: &str) -> Vec<f64> {
     let mut nums = Vec::new();
     let chars: Vec<char> = text.chars().collect();
@@ -130,4 +134,60 @@ pub fn check_polarity_conflict(gt_text: &str, cand_text: &str) -> bool {
         }
     }
     false
+}
+
+pub fn extract_words(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        if is_alpha(chars[i]) || is_digit(chars[i]) {
+            let mut w = String::new();
+            while i < chars.len() && (is_alpha(chars[i]) || is_digit(chars[i])) {
+                w.push(to_lower(chars[i]));
+                i += 1;
+            }
+            if !w.is_empty() {
+                words.push(w);
+            }
+        } else {
+            i += 1;
+        }
+    }
+    words
+}
+
+pub fn check_ground_truth_support(gt_text: &str, cand_text: &str) -> f32 {
+    let gt_nums = parse_numbers(gt_text);
+    if !gt_nums.is_empty() {
+        return check_numeric_match(gt_text, cand_text);
+    }
+
+    let all_gt_words = extract_words(gt_text);
+    let key_gt_words: Vec<&String> = all_gt_words.iter().filter(|w| !is_stopword(w.as_str())).collect();
+    let effective_gt = if key_gt_words.is_empty() { all_gt_words.iter().collect() } else { key_gt_words };
+
+    if effective_gt.is_empty() {
+        return 1.0;
+    }
+
+    let cand_words = extract_words(cand_text);
+    if cand_words.is_empty() {
+        return 0.0;
+    }
+
+    let mut matched = 0;
+    for &gw in &effective_gt {
+        if cand_words.iter().any(|cw| cw == gw) {
+            matched += 1;
+        }
+    }
+
+    let recall = (matched as f32) / (effective_gt.len() as f32);
+    if recall >= 0.85 {
+        1.0
+    } else {
+        0.0 // Zero credit if key entities/words are missing (e.g. ADA vs SOL, or Proof of Work vs History)
+    }
 }
