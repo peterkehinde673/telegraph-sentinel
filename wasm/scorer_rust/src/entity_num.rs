@@ -18,32 +18,71 @@ fn to_lower(c: char) -> char {
 }
 
 pub fn is_stopword(w: &str) -> bool {
-    matches!(w, "the" | "a" | "an" | "of" | "in" | "on" | "at" | "to" | "for" | "with" | "by" | "is" | "are" | "was" | "were" | "it" | "and" | "or" | "as" | "what" | "who" | "did" | "which" | "does" | "about")
+    matches!(
+        w,
+        "the" | "a" | "an" | "of" | "in" | "on" | "at" | "to" | "for" | "with" | "by" | "is"
+            | "are" | "was" | "were" | "it" | "and" | "or" | "as" | "what" | "who" | "did"
+            | "which" | "does" | "about" | "currently" | "trading" | "price" | "value"
+    )
 }
 
-pub fn parse_numbers(text: &str) -> Vec<f64> {
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct NumberMatch {
+    pub value: f64,
+    pub is_percentage: bool,
+}
+
+pub fn parse_crypto_numbers(text: &str) -> Vec<NumberMatch> {
     let mut nums = Vec::new();
     let chars: Vec<char> = text.chars().collect();
     let mut i = 0;
 
     while i < chars.len() {
-        if is_digit(chars[i]) || (chars[i] == '.' && i + 1 < chars.len() && is_digit(chars[i + 1])) {
-            let mut num_str = String::new();
-            while i < chars.len() && (is_digit(chars[i]) || chars[i] == '.') {
-                num_str.push(chars[i]);
+        let c = chars[i];
+        if is_digit(c) || ((c == '$' || c == '€' || c == '£' || c == '¥') && i + 1 < chars.len() && (is_digit(chars[i + 1]) || chars[i + 1] == '.')) {
+            if !is_digit(c) {
                 i += 1;
             }
 
+            let mut num_str = String::new();
+            let mut has_dot = false;
+
+            while i < chars.len() {
+                let curr = chars[i];
+                if is_digit(curr) {
+                    num_str.push(curr);
+                    i += 1;
+                } else if curr == '.' && !has_dot && i + 1 < chars.len() && is_digit(chars[i + 1]) {
+                    has_dot = true;
+                    num_str.push(curr);
+                    i += 1;
+                } else if curr == ',' && i + 1 < chars.len() && is_digit(chars[i + 1]) {
+                    // Skip thousands comma
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+
             let mut multiplier = 1.0;
+            let mut is_pct = false;
+
+            // Check for units / multipliers / percentages
             let mut j = i;
             while j < chars.len() && chars[j] == ' ' { j += 1; }
+
             if j < chars.len() {
-                let lower_c = to_lower(chars[j]);
-                if lower_c == 'm' || (j + 6 < chars.len() && &text[j..j+7].to_lowercase() == "million") {
-                    multiplier = 1_000_000.0;
-                } else if lower_c == 'b' || (j + 6 < chars.len() && &text[j..j+7].to_lowercase() == "billion") {
+                let rem: String = chars[j..].iter().map(|&ch| to_lower(ch)).collect();
+                if rem.starts_with('%') || rem.starts_with("percent") {
+                    is_pct = true;
+                } else if rem.starts_with("bps") || rem.starts_with("basis points") {
+                    is_pct = true;
+                    multiplier = 0.01; // 100 bps = 1%
+                } else if rem.starts_with("billion") || rem.starts_with('b') {
                     multiplier = 1_000_000_000.0;
-                } else if lower_c == 'k' {
+                } else if rem.starts_with("million") || rem.starts_with('m') {
+                    multiplier = 1_000_000.0;
+                } else if rem.starts_with("thousand") || rem.starts_with('k') {
                     multiplier = 1_000.0;
                 }
             }
@@ -65,7 +104,13 @@ pub fn parse_numbers(text: &str) -> Vec<f64> {
                     }
                 }
             }
-            nums.push(val * multiplier);
+
+            if !num_str.is_empty() {
+                nums.push(NumberMatch {
+                    value: val * multiplier,
+                    is_percentage: is_pct,
+                });
+            }
         } else {
             i += 1;
         }
@@ -74,65 +119,134 @@ pub fn parse_numbers(text: &str) -> Vec<f64> {
 }
 
 pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
-    let gt_nums = parse_numbers(gt_text);
+    let gt_nums = parse_crypto_numbers(gt_text);
     if gt_nums.is_empty() {
-        return 1.0;
+        return 1.0; // No numbers to evaluate
     }
 
-    let cand_nums = parse_numbers(cand_text);
+    let cand_nums = parse_crypto_numbers(cand_text);
     if cand_nums.is_empty() {
-        return 0.35; // Partial credit for qualitative statement
+        return 0.15; // Ground truth has price/numbers but candidate has none
     }
 
     let mut matched_count = 0;
-    for &gn in &gt_nums {
-        for &cn in &cand_nums {
-            let diff = if gn > cn { gn - cn } else { cn - gn };
-            let max_val = if gn > cn { gn } else { cn };
-            let rel_diff = if max_val > 0.0 { diff / max_val } else { diff };
-            if rel_diff <= 0.02 { // 2% numerical tolerance
-                matched_count += 1;
+    for gn in &gt_nums {
+        let mut found = false;
+        for cn in &cand_nums {
+            let diff = if gn.value > cn.value { gn.value - cn.value } else { cn.value - gn.value };
+            let max_v = if gn.value > cn.value { gn.value } else { cn.value };
+            let rel_diff = if max_v > 0.0 { diff / max_v } else { diff };
+
+            // 2% relative tolerance for spot price variations / rounding
+            if rel_diff <= 0.02 {
+                found = true;
                 break;
             }
+        }
+        if found {
+            matched_count += 1;
         }
     }
 
     if matched_count == gt_nums.len() {
         1.0
     } else if matched_count > 0 {
-        0.55
+        0.50
     } else {
-        0.10 // Severe continuous penalty for contradictory numbers
+        0.01 // Severe penalty for wrong price/numerical claim
     }
 }
 
-pub fn check_entity_consistency(gt_text: &str, cand_text: &str) -> f32 {
-    let tickers = ["btc", "eth", "sol", "arb", "op", "aave", "mkr", "uni", "link", "usdt", "usdc", "steth", "satoshi", "vitalik"];
-    let gt_lower: String = gt_text.chars().map(to_lower).collect();
-    let cand_lower: String = cand_text.chars().map(to_lower).collect();
+pub fn extract_crypto_entities(text: &str) -> Vec<&'static str> {
+    let entities = [
+        ("bitcoin", "btc"),
+        ("btc", "btc"),
+        ("ethereum", "eth"),
+        ("ether", "eth"),
+        ("eth", "eth"),
+        ("solana", "sol"),
+        ("sol", "sol"),
+        ("aave", "aave"),
+        ("cardano", "ada"),
+        ("ada", "ada"),
+        ("arbitrum", "arb"),
+        ("arb", "arb"),
+        ("optimism", "op"),
+        ("op", "op"),
+        ("uniswap", "uni"),
+        ("uni", "uni"),
+        ("chainlink", "link"),
+        ("link", "link"),
+        ("polygon", "matic"),
+        ("matic", "matic"),
+        ("pol", "matic"),
+        ("makerdao", "mkr"),
+        ("maker", "mkr"),
+        ("mkr", "mkr"),
+        ("tether", "usdt"),
+        ("usdt", "usdt"),
+        ("usdc", "usdc"),
+        ("lido", "steth"),
+        ("steth", "steth"),
+        ("avalanche", "avax"),
+        ("avax", "avax"),
+        ("binance", "bnb"),
+        ("bnb", "bnb"),
+        ("ripple", "xrp"),
+        ("xrp", "xrp"),
+        ("doge", "doge"),
+        ("dogecoin", "doge"),
+    ];
 
-    let mut gt_entities = Vec::new();
-    for &t in &tickers {
-        if gt_lower.contains(t) {
-            gt_entities.push(t);
+    let lower: String = text.chars().map(to_lower).collect();
+    let words = extract_words(text);
+    let mut found_canonical = Vec::new();
+
+    for (name, canonical) in entities {
+        if words.iter().any(|w| w == name) || lower.contains(name) {
+            if !found_canonical.contains(&canonical) {
+                found_canonical.push(canonical);
+            }
         }
     }
+    found_canonical
+}
 
-    if gt_entities.is_empty() {
+pub fn check_crypto_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str) -> f32 {
+    let mut ref_entities = extract_crypto_entities(gt_text);
+    if ref_entities.is_empty() {
+        ref_entities = extract_crypto_entities(q_text);
+    }
+
+    if ref_entities.is_empty() {
         return 1.0;
     }
 
-    for t in &gt_entities {
-        if !cand_lower.contains(t) {
-            for &comp in &tickers {
-                if comp != *t && cand_lower.contains(comp) {
-                    return 0.15; // Penalize substituting a wrong entity
-                }
-            }
-            return 0.35;
+    let cand_entities = extract_crypto_entities(cand_text);
+    if cand_entities.is_empty() {
+        return 0.60;
+    }
+
+    let mut matched = 0;
+    let mut substituted_wrong = false;
+
+    for &re in &ref_entities {
+        if cand_entities.contains(&re) {
+            matched += 1;
+        } else {
+            substituted_wrong = true;
         }
     }
-    1.0
+
+    if matched == ref_entities.len() && !substituted_wrong {
+        1.0
+    } else if matched > 0 {
+        0.50
+    } else if substituted_wrong {
+        0.02 // Wrong asset substitution penalty (e.g. ADA instead of SOL)
+    } else {
+        0.20
+    }
 }
 
 pub fn check_polarity_conflict(gt_text: &str, cand_text: &str) -> f32 {
@@ -158,10 +272,33 @@ pub fn check_polarity_conflict(gt_text: &str, cand_text: &str) -> f32 {
         let cand_has_pos = cand_lower.contains(pos);
         let cand_has_neg = cand_lower.contains(neg);
 
-        if (gt_has_pos && !gt_has_neg && cand_has_neg && !cand_has_pos) ||
-           (gt_has_neg && !gt_has_pos && cand_has_pos && !cand_has_neg) {
-            return 0.05; // Polarity conflict
+        if (gt_has_pos && !gt_has_neg && cand_has_neg && !cand_has_pos)
+            || (gt_has_neg && !gt_has_pos && cand_has_pos && !cand_has_neg)
+        {
+            return 0.02;
         }
     }
     1.0
+}
+
+pub fn extract_words(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        if is_alpha(chars[i]) || is_digit(chars[i]) {
+            let mut w = String::new();
+            while i < chars.len() && (is_alpha(chars[i]) || is_digit(chars[i])) {
+                w.push(to_lower(chars[i]));
+                i += 1;
+            }
+            if !w.is_empty() {
+                words.push(w);
+            }
+        } else {
+            i += 1;
+        }
+    }
+    words
 }

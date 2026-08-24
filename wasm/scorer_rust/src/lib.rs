@@ -24,11 +24,6 @@ const IDX_LEXICAL: usize = 2;
 const IDX_LENGTH: usize = 3;
 const IDX_COMPOSITE: usize = 4;
 
-const W_RELEVANCE: f32 = 0.20;
-const W_CORRECTNESS: f32 = 0.55;
-const W_LEXICAL: f32 = 0.15;
-const W_LENGTH: f32 = 0.10;
-
 #[inline]
 unsafe fn read_str<'a>(ptr: i32, len: i32) -> &'a str {
     if ptr <= 0 || len <= 0 {
@@ -58,14 +53,14 @@ fn to_lower_str(s: &str) -> String {
     out
 }
 
-// Strictly monotonic cubic contrast curve (d/dx > 0 everywhere -> zero inverted rankings)
+// Strictly monotonic cubic contrast curve (d/dx > 0 everywhere)
 #[inline]
-fn apply_smooth_monotonic_contrast(raw_score: f32) -> f32 {
-    let x = math::clamp01(raw_score);
+fn apply_high_separation_curve(raw: f32) -> f32 {
+    let x = math::clamp01(raw);
     if x <= 0.05 {
         return 0.0;
     }
-    if x >= 0.98 {
+    if x >= 0.99 {
         return 1.0;
     }
     let x3 = x * x * x;
@@ -80,7 +75,11 @@ fn apply_smooth_monotonic_contrast(raw_score: f32) -> f32 {
 }
 
 #[inline]
-unsafe fn compute_signals(question: &str, ground_truth: &str, miner_answer: &str) -> (f32, f32, f32, f32) {
+unsafe fn compute_signals(
+    question: &str,
+    ground_truth: &str,
+    miner_answer: &str,
+) -> (f32, f32, f32, f32) {
     let q_enc = tokenizer::tokenize(question);
     let gt_enc = tokenizer::tokenize(ground_truth);
     let ma_enc = tokenizer::tokenize(miner_answer);
@@ -96,7 +95,7 @@ unsafe fn compute_signals(question: &str, ground_truth: &str, miner_answer: &str
 unsafe fn signals_from_vecs(
     q_vec: &[f32],
     gt_vec: &[f32],
-    _question: &str,
+    question: &str,
     ground_truth: &str,
     miner_answer: &str,
     ma_vec: &[f32],
@@ -105,34 +104,33 @@ unsafe fn signals_from_vecs(
     let semantic_sim = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
-    let num_mult = entity_num::check_numeric_consistency(ground_truth, miner_answer);
-    let entity_mult = entity_num::check_entity_consistency(ground_truth, miner_answer);
-    let polarity_mult = entity_num::check_polarity_conflict(ground_truth, miner_answer);
+    let num_multiplier = entity_num::check_numeric_consistency(ground_truth, miner_answer);
+    let entity_multiplier = entity_num::check_crypto_entity_consistency(question, ground_truth, miner_answer);
+    let polarity_multiplier = entity_num::check_polarity_conflict(ground_truth, miner_answer);
 
     let gt_l = to_lower_str(ground_truth);
     let ma_l = to_lower_str(miner_answer);
-    let is_exact = gt_l == ma_l || (ma_l.contains(&gt_l) && !gt_l.is_empty());
+    let is_exact = gt_l.trim() == ma_l.trim();
 
     let base_correctness = if is_exact {
-        0.98
+        1.0
     } else {
         semantic_sim
     };
 
-    let correctness = base_correctness * num_mult * entity_mult * polarity_mult;
-    let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0) * correctness;
+    let correctness = base_correctness * num_multiplier * entity_multiplier * polarity_multiplier;
+    let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0);
 
     (relevance, correctness, lexical, len_quality)
 }
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    let raw = (W_RELEVANCE * relevance)
-            + (W_CORRECTNESS * correctness)
-            + (W_LEXICAL * lexical)
-            + (W_LENGTH * len_quality);
+    // Multiplicative Gating: Correctness gates the response score
+    let base_quality = 0.65 + (0.20 * relevance) + (0.15 * lexical);
+    let raw = correctness * base_quality * (0.95 + 0.05 * len_quality);
 
-    apply_smooth_monotonic_contrast(raw)
+    apply_high_separation_curve(raw)
 }
 
 #[no_mangle]
@@ -153,7 +151,8 @@ pub unsafe extern "C" fn rank_answer(
         return 1.0;
     }
 
-    let (relevance, correctness, lexical, len_quality) = compute_signals(question, ground_truth, miner_answer);
+    let (relevance, correctness, lexical, len_quality) =
+        compute_signals(question, ground_truth, miner_answer);
     composite(relevance, correctness, lexical, len_quality)
 }
 
