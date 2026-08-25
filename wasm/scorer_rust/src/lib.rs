@@ -59,7 +59,7 @@ fn apply_high_separation_curve(raw: f32) -> f32 {
     if x <= 0.03 {
         return 0.0;
     }
-    if x >= 0.99 {
+    if x >= 0.98 {
         return 1.0;
     }
     let x3 = x * x * x;
@@ -108,14 +108,12 @@ unsafe fn signals_from_vecs(
     let currency_mult = entity_num::check_currency_consistency(ground_truth, miner_answer);
     let polarity_mult = entity_num::check_polarity_conflict(ground_truth, miner_answer);
 
-    let gt_l = to_lower_str(ground_truth);
-    let ma_l = to_lower_str(miner_answer);
-    let is_exact = gt_l.trim() == ma_l.trim();
+    let is_exact = entity_num::contains_whole_word(miner_answer, ground_truth);
 
-    let base_correctness = if is_exact {
-        1.0
+    let base_correctness = if is_exact || num_mult == 1.0 {
+        0.98
     } else {
-        semantic_sim
+        semantic_sim * 0.10
     };
 
     let correctness = base_correctness * num_mult * entity_mult * currency_mult * polarity_mult;

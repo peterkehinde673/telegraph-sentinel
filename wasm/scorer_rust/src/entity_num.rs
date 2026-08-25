@@ -40,7 +40,7 @@ pub fn parse_crypto_numbers(text: &str) -> Vec<NumberMatch> {
     while i < chars.len() {
         let c = chars[i];
         if is_digit(c) || ((c == '$' || c == '€' || c == '£' || c == '¥') && i + 1 < chars.len() && (is_digit(chars[i + 1]) || chars[i + 1] == '.')) {
-            if !is_digit(c) {
+            if !is_digit(chars[i]) {
                 i += 1;
             }
 
@@ -85,9 +85,9 @@ pub fn parse_crypto_numbers(text: &str) -> Vec<NumberMatch> {
                 }
             }
 
-            let mut val = 0.0;
+            let mut val: f64 = 0.0;
             let mut decimal = false;
-            let mut div = 1.0;
+            let mut div: f64 = 1.0;
 
             for ch in num_str.chars() {
                 if ch == '.' {
@@ -129,28 +129,24 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
 
     let mut matched_count = 0;
     for gn in &gt_nums {
-        let mut found = false;
         for cn in &cand_nums {
             let diff = if gn.value > cn.value { gn.value - cn.value } else { cn.value - gn.value };
             let max_v = if gn.value > cn.value { gn.value } else { cn.value };
             let rel_diff = if max_v > 0.0 { diff / max_v } else { diff };
 
             if rel_diff <= 0.02 {
-                found = true;
+                matched_count += 1;
                 break;
             }
-        }
-        if found {
-            matched_count += 1;
         }
     }
 
     if matched_count == gt_nums.len() {
         1.0
     } else if matched_count > 0 {
-        0.45
+        0.50
     } else {
-        0.01 // Continuous severe penalty for wrong numerical value
+        0.01
     }
 }
 
@@ -220,7 +216,7 @@ pub fn check_crypto_entity_consistency(q_text: &str, gt_text: &str, cand_text: &
 
     let cand_entities = extract_crypto_entities(cand_text);
     if cand_entities.is_empty() {
-        return 0.50;
+        return 0.60;
     }
 
     let mut matched = 0;
@@ -236,12 +232,10 @@ pub fn check_crypto_entity_consistency(q_text: &str, gt_text: &str, cand_text: &
 
     if matched == ref_entities.len() && !substituted_wrong {
         1.0
-    } else if matched > 0 {
-        0.50
     } else if substituted_wrong {
-        0.02 // Wrong asset penalty (e.g. ADA vs SOL)
+        0.02
     } else {
-        0.20
+        0.30
     }
 }
 
@@ -280,7 +274,7 @@ pub fn check_currency_consistency(gt_text: &str, cand_text: &str) -> f32 {
         }
         if let Some(cc) = cand_curr {
             if gc != cc && !((gc == "usd" && (cc == "usdt" || cc == "usdc")) || (cc == "usd" && (gc == "usdt" || gc == "usdc"))) {
-                return 0.05; // Currency conflict (e.g. EUR vs USD)
+                return 0.05;
             }
         }
     }
@@ -339,4 +333,20 @@ pub fn extract_words(text: &str) -> Vec<String> {
         }
     }
     words
+}
+
+pub fn contains_whole_word(haystack: &str, needle: &str) -> bool {
+    let all_n_words = extract_words(needle);
+    let key_n_words: Vec<&String> = all_n_words.iter().filter(|w| !is_stopword(w.as_str())).collect();
+    let effective_n = if key_n_words.is_empty() { all_n_words.iter().collect() } else { key_n_words };
+
+    if effective_n.is_empty() { return false; }
+
+    let h_words = extract_words(haystack);
+    for nw in &effective_n {
+        if !h_words.contains(nw) {
+            return false;
+        }
+    }
+    true
 }

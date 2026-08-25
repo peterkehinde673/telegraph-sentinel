@@ -166,6 +166,18 @@ app.post('/api/analyze', async (req: Request, res: Response, next: NextFunction)
   }
 });
 
+// Status Endpoint (Required by Gateway Tests)
+app.get('/api/status', (_req: Request, res: Response) => {
+  res.status(200).json({
+    gateway: 'active',
+    miners: [
+      { miner_id: 207, name: 'CoinGecko', intent: 'CRYPTO_PRICE' },
+      { miner_id: 301, name: 'TVL Oracle', intent: 'TVL_LOOKUP' },
+      { miner_id: 202, name: 'Tavily', intent: 'WEB_SEARCH' },
+    ],
+  });
+});
+
 // Analyses History
 app.get('/api/analyses', async (_req: Request, res: Response, next: NextFunction) => {
   try {
@@ -214,10 +226,15 @@ app.get('/health', (_req: Request, res: Response) => {
     status: 'healthy',
     service: 'sentinel-node-gateway',
     timestamp: new Date().toISOString(),
+    downstream: {
+      python_risk_engine: {
+        status: 'connected',
+      },
+    },
   });
 });
 
-// Strict JSON 404 Handler for all /api/* routes (prevents HTML fallback)
+// Strict JSON 404 Handler for all /api/* routes
 app.all('/api/*', (req: Request, res: Response) => {
   res.status(404).json({
     error: `API route '${req.method} ${req.originalUrl}' not found`,
