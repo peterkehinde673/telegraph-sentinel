@@ -9,6 +9,7 @@ mod allocator;
 mod bm25;
 mod embed;
 mod math;
+mod numeric;
 mod tokenizer;
 
 const EMBED_DIM: usize = 384;
@@ -57,27 +58,38 @@ fn to_lower_str(s: &str) -> String {
     out
 }
 
+// Continuous strictly monotonic cubic contrast function (d/dx > 0 everywhere)
 #[inline]
-fn detect_polarity_conflict(gt: &str, ma: &str) -> bool {
-    let gt_l = to_lower_str(gt);
-    let ma_l = to_lower_str(ma);
-
-    if (gt_l.contains("no") || gt_l.contains("false")) && (ma_l.starts_with("yes") || ma_l.contains("yes,") || ma_l.contains("yes ")) {
-        return true;
+fn apply_high_separation_curve(raw: f32) -> f32 {
+    let x = math::clamp01(raw);
+    if x <= 0.03 {
+        return 0.0;
     }
-    if (gt_l.contains("yes") || gt_l.contains("true")) && (ma_l.starts_with("no") || ma_l.contains("no,") || ma_l.contains("no ")) {
-        return true;
+    if x >= 0.99 {
+        return 1.0;
     }
-    false
+    let x3 = x * x * x;
+    let inv_x = 1.0 - x;
+    let inv_x3 = inv_x * inv_x * inv_x;
+    let den = x3 + inv_x3;
+    if den <= 0.0 {
+        0.0
+    } else {
+        math::clamp01(x3 / den)
+    }
 }
 
 #[inline]
-unsafe fn compute_signals(question: &str, ground_truth: &str, miner_answer: &str) -> (f32, f32, f32, f32) {
-    let q_enc  = tokenizer::tokenize(question);
+unsafe fn compute_signals(
+    question: &str,
+    ground_truth: &str,
+    miner_answer: &str,
+) -> (f32, f32, f32, f32) {
+    let q_enc = tokenizer::tokenize(question);
     let gt_enc = tokenizer::tokenize(ground_truth);
     let ma_enc = tokenizer::tokenize(miner_answer);
 
-    let q_vec  = embed::run(&q_enc);
+    let q_vec = embed::run(&q_enc);
     let gt_vec = embed::run(&gt_enc);
     let ma_vec = embed::run(&ma_enc);
 
@@ -92,51 +104,51 @@ unsafe fn signals_from_vecs(
     miner_answer: &str,
     ma_vec: &[f32],
 ) -> (f32, f32, f32, f32) {
-    let mut relevance   = math::cosine(q_vec, ma_vec);
-    let cosine_corr     = math::cosine(gt_vec, ma_vec);
-    let lexical         = bm25::score(ground_truth, miner_answer);
+    let relevance = math::cosine(q_vec, ma_vec);
+    let semantic_sim = math::cosine(gt_vec, ma_vec);
+    let lexical = bm25::score(ground_truth, miner_answer);
+
+    let num_mult = numeric::check_numeric_consistency(ground_truth, miner_answer);
+    let polarity_mult = numeric::check_polarity_conflict(ground_truth, miner_answer);
 
     let gt_l = to_lower_str(ground_truth);
     let ma_l = to_lower_str(miner_answer);
+    let is_exact = gt_l.trim() == ma_l.trim();
 
-    // Boost correctness when candidate directly contains or asserts ground-truth
-    let mut correctness = if ma_l.contains(&gt_l) && !gt_l.is_empty() {
-        cosine_corr.max(0.85)
+    let base_correctness = if is_exact {
+        1.0
     } else {
-        cosine_corr
+        semantic_sim
     };
 
-    // Polarity conflict suppression (penalize both correctness and relevance)
-    if detect_polarity_conflict(ground_truth, miner_answer) {
-        correctness *= 0.05;
-        relevance *= 0.10;
-    }
-
-    let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0);
+    let correctness = base_correctness * num_mult * polarity_mult;
+    let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0) * correctness;
 
     (relevance, correctness, lexical, len_quality)
 }
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    let score = W_RELEVANCE   * relevance
-              + W_CORRECTNESS * correctness
-              + W_LEXICAL     * lexical
-              + W_LENGTH      * len_quality;
-    math::clamp01(score)
+    let base_quality = 0.65 + (0.20 * relevance) + (0.15 * lexical);
+    let raw = (W_RELEVANCE * relevance)
+            + (W_CORRECTNESS * correctness * base_quality)
+            + (W_LEXICAL * lexical * correctness)
+            + (W_LENGTH * len_quality);
+
+    apply_high_separation_curve(raw)
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn rank_answer(
-    q_ptr: i32,  q_len: i32,
+    q_ptr: i32, q_len: i32,
     gt_ptr: i32, gt_len: i32,
     ma_ptr: i32, ma_len: i32,
 ) -> f32 {
-    let question     = read_str(q_ptr,  q_len);
+    let question = read_str(q_ptr, q_len);
     let ground_truth = read_str(gt_ptr, gt_len);
     let miner_answer = read_str(ma_ptr, ma_len);
 
-    if miner_answer.trim().is_empty() {
+    if miner_answer.trim().is_empty() || ground_truth.trim().is_empty() {
         return 0.0;
     }
 
@@ -146,7 +158,6 @@ pub unsafe extern "C" fn rank_answer(
 
     let (relevance, correctness, lexical, len_quality) =
         compute_signals(question, ground_truth, miner_answer);
-
     composite(relevance, correctness, lexical, len_quality)
 }
 
@@ -160,7 +171,7 @@ pub unsafe extern "C" fn rank_answer_cached(
     let ground_truth = read_str(gt_ptr, gt_len);
     let miner_answer = read_str(ma_ptr, ma_len);
 
-    if miner_answer.trim().is_empty() {
+    if miner_answer.trim().is_empty() || ground_truth.trim().is_empty() {
         return 0.0;
     }
 
@@ -182,11 +193,11 @@ pub unsafe extern "C" fn rank_answer_cached(
 
 #[no_mangle]
 pub unsafe extern "C" fn breakdown_answer(
-    q_ptr: i32,  q_len: i32,
+    q_ptr: i32, q_len: i32,
     gt_ptr: i32, gt_len: i32,
     ma_ptr: i32, ma_len: i32,
 ) -> i32 {
-    let question     = read_str(q_ptr,  q_len);
+    let question = read_str(q_ptr, q_len);
     let ground_truth = read_str(gt_ptr, gt_len);
     let miner_answer = read_str(ma_ptr, ma_len);
 
@@ -198,13 +209,13 @@ pub unsafe extern "C" fn breakdown_answer(
     let (relevance, correctness, lexical, len_quality) =
         compute_signals(question, ground_truth, miner_answer);
 
-    let composite_score = composite(relevance, correctness, lexical, len_quality);
+    let comp = composite(relevance, correctness, lexical, len_quality);
 
     BREAKDOWN_BUF[IDX_RELEVANCE]   = relevance;
     BREAKDOWN_BUF[IDX_CORRECTNESS] = correctness;
     BREAKDOWN_BUF[IDX_LEXICAL]     = lexical;
     BREAKDOWN_BUF[IDX_LENGTH]      = len_quality;
-    BREAKDOWN_BUF[IDX_COMPOSITE]   = composite_score;
+    BREAKDOWN_BUF[IDX_COMPOSITE]   = comp;
 
     BREAKDOWN_BUF.as_ptr() as i32
 }
@@ -212,8 +223,8 @@ pub unsafe extern "C" fn breakdown_answer(
 #[no_mangle]
 pub unsafe extern "C" fn embed(text_ptr: i32, text_len: i32) -> i32 {
     let text = read_str(text_ptr, text_len);
-    let enc  = tokenizer::tokenize(text);
-    let vec  = embed::run(&enc);
+    let enc = tokenizer::tokenize(text);
+    let vec = embed::run(&enc);
 
     EMBED_BUF.copy_from_slice(&vec);
     EMBED_BUF.as_ptr() as i32
@@ -229,7 +240,7 @@ pub unsafe extern "C" fn cosine_sim(ptr_a: i32, ptr_b: i32, dim: i32) -> f32 {
 #[no_mangle]
 pub unsafe extern "C" fn bm25_score(q_ptr: i32, q_len: i32, doc_ptr: i32, doc_len: i32) -> f32 {
     let query = read_str(q_ptr, q_len);
-    let doc   = read_str(doc_ptr, doc_len);
+    let doc = read_str(doc_ptr, doc_len);
     bm25::score(query, doc)
 }
 

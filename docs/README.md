@@ -8,13 +8,13 @@ Telegraph Sentinel is an autonomous pre-flight risk intelligence engine and live
 
 ## Live Demo & Production Deployment
 
-* **24/7 Cloud Dashboard & Gateway**: [https://telegraph-sentinel-d68u.onrender.com]https://telegraph-sentinel-d68u.onrender.comi
+* **24/7 Cloud Dashboard & Gateway**: [https://telegraph-sentinel-d68u.onrender.com]https://telegraph-sentinel-d68u.onrender.com)
 * **Local Development Server**: `http://localhost:4000`
 * **Live Miner Oracle (CRYPTO_PRICE)**: `POST https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/risk-assessment`
 * **Integrate YAML Spec**: [https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel-miner.yaml](https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel-miner.yaml)
 * **WASM Candidate Scorer**: [https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel_scorer.wasm](https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel_scorer.wasm)
 
-![Telegraph Sentinel Dashboard](docs/assets/dashboard.png)
+![Telegraph Sentinel Dashboard](assets/dashboard.png)
 
 ---
 
