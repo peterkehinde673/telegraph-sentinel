@@ -15,7 +15,7 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
   const { alloc, rank_answer, breakdown_answer, memory } = ex;
 
   console.log('\n================================================================');
-  console.log('    TELEGRAPH WASM 104-CASE FINANCIAL BENCHMARK & AUDIT        ');
+  console.log('    TELEGRAPH WASM 104-FIXTURE FINANCIAL BENCHMARK & AUDIT     ');
   console.log('================================================================');
 
   const required = ['memory', 'alloc', 'dealloc', 'rank_answer', 'rank_answer_cached', 'breakdown_answer', 'embed', 'cosine_sim', 'bm25_score'];
@@ -33,8 +33,8 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
     return { ptr, len: buf.length };
   }
 
-  // Generate 104 Comprehensive Financial & Adversarial Fixtures
-  const baseCategories = [
+  // 104 Distinct Financial, Protocol & Adversarial Fixtures
+  const baseFixtures = [
     { q: "What is the price of ETH?", gt: "$3,450", good: "Ethereum is trading at $3,450 USD.", bad: "Ethereum is trading at $1,200 USD." },
     { q: "What is the TVL of Aave?", gt: "$12.4B", good: "Aave total value locked is $12.4 billion.", bad: "Aave total value locked is $1.2B." },
     { q: "What is the circulating supply of BTC?", gt: "19.7 million", good: "Circulating supply is 19.7M BTC.", bad: "Circulating supply is 120 million BTC." },
@@ -47,7 +47,14 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
     { q: "What is the flash loan fee on Aave v3?", gt: "0.05%", good: "Flash loan fee is 0.05%.", bad: "Flash loan fee is 12%." },
     { q: "What is the decimals parameter for USDC?", gt: "6", good: "USDC token contract uses 6 decimals.", bad: "USDC uses 18 decimals." },
     { q: "What is the block reward on Bitcoin post-2024?", gt: "3.125 BTC", good: "The block subsidy is 3.125 BTC.", bad: "The block subsidy is 6.25 BTC." },
-    { q: "What is the liquidation penalty on Compound?", gt: "8%", good: "Compound liquidation incentive penalty is 8%.", bad: "Liquidation penalty is 75%." }
+    { q: "What is the liquidation penalty on Compound?", gt: "8%", good: "Compound liquidation incentive penalty is 8%.", bad: "Liquidation penalty is 75%." },
+    { q: "Who founded Ethereum?", gt: "Vitalik Buterin", good: "Ethereum was founded by Vitalik Buterin.", bad: "Ethereum was founded by Satoshi Nakamoto." },
+    { q: "Who created Bitcoin?", gt: "Satoshi Nakamoto", good: "Bitcoin was created by Satoshi Nakamoto.", bad: "Bitcoin was created by Charlie Lee." },
+    { q: "What is Lido's staked asset?", gt: "stETH", good: "Lido issues stETH for staked Ethereum.", bad: "Lido issues rETH." },
+    { q: "What is the consensus algorithm of Solana?", gt: "Proof of History", good: "Solana uses Proof of History and PoS.", bad: "Solana uses Proof of Work mining." },
+    { q: "Is Tornado Cash sanctioned?", gt: "Yes", good: "Tornado Cash was placed under sanctions.", bad: "No, Tornado Cash has never faced regulatory sanctions." },
+    { q: "What is the pegged asset for USDT?", gt: "US Dollar", good: "Tether is pegged 1:1 to the US Dollar.", bad: "Tether is pegged to the Japanese Yen." },
+    { q: "What is EIP-1559?", gt: "Base fee burn mechanism", good: "EIP-1559 introduced the dynamic base fee burn.", bad: "EIP-1559 changed proof of work to proof of stake." }
   ];
 
   const assets = [
@@ -58,10 +65,14 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
     { name: "Chainlink", sym: "LINK", price: "$11.80", badPrice: "$1.50", wrongSym: "BAND" },
     { name: "Uniswap", sym: "UNI", price: "$7.25", badPrice: "$0.80", wrongSym: "SUSHI" },
     { name: "Maker", sym: "MKR", price: "$2,100", badPrice: "$350", wrongSym: "COMP" },
-    { name: "Arbitrum", sym: "ARB", price: "$0.55", badPrice: "$8.50", wrongSym: "OP" }
+    { name: "Arbitrum", sym: "ARB", price: "$0.55", badPrice: "$8.50", wrongSym: "OP" },
+    { name: "Cardano", sym: "ADA", price: "$0.38", badPrice: "$4.20", wrongSym: "SOL" },
+    { name: "Optimism", sym: "OP", price: "$1.42", badPrice: "$18.50", wrongSym: "ARB" },
+    { name: "Polygon", sym: "MATIC", price: "$0.45", badPrice: "$12.00", wrongSym: "ETH" },
+    { name: "Dogecoin", sym: "DOGE", price: "$0.10", badPrice: "$2.50", wrongSym: "SHIB" }
   ];
 
-  const fixtures = [...baseCategories];
+  const fixtures = [...baseFixtures];
 
   assets.forEach(a => {
     fixtures.push({ q: `What is the price of ${a.name}?`, gt: a.price, good: `${a.name} (${a.sym}) is trading at ${a.price}.`, bad: `${a.name} (${a.sym}) is trading at ${a.badPrice}.` });
@@ -70,17 +81,8 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
     fixtures.push({ q: `Is ${a.sym} trading above $100,000?`, gt: "No", good: `No, ${a.sym} is currently at ${a.price}.`, bad: `Yes, ${a.sym} has crossed $100,000.` });
     fixtures.push({ q: `Did ${a.sym} market cap increase today?`, gt: "Increased", good: `${a.sym} market valuation increased today.`, bad: `${a.sym} market valuation decreased sharply.` });
     fixtures.push({ q: `What is ${a.sym} 24h trading volume?`, gt: "$1.5B", good: `24-hour volume for ${a.sym} is $1.5 billion.`, bad: `24-hour volume for ${a.sym} is $20M.` });
-    fixtures.push({ q: `Is ${a.name} a Layer 1 blockchain?`, gt: "Yes", good: `Yes, ${a.name} operates as an independent blockchain.`, bad: `No, ${a.name} is not a blockchain.` });
+    fixtures.push({ q: `What is ${a.name} price in EUR?`, gt: a.price, good: `${a.name} is trading at ${a.price} USD.`, bad: `${a.name} is trading at ${a.price} EUR.` });
   });
-
-  // Structural & Entity specific checks
-  fixtures.push({ q: "Who founded Ethereum?", gt: "Vitalik Buterin", good: "Ethereum was founded by Vitalik Buterin.", bad: "Ethereum was founded by Satoshi Nakamoto." });
-  fixtures.push({ q: "Who created Bitcoin?", gt: "Satoshi Nakamoto", good: "Bitcoin was created by Satoshi Nakamoto.", bad: "Bitcoin was created by Charlie Lee." });
-  fixtures.push({ q: "What is Lido's staked asset?", gt: "stETH", good: "Lido issues stETH for staked Ethereum.", bad: "Lido issues rETH." });
-  fixtures.push({ q: "What is the consensus algorithm of Solana?", gt: "Proof of History", good: "Solana uses Proof of History and PoS.", bad: "Solana uses Proof of Work mining." });
-  fixtures.push({ q: "Is Tornado Cash sanctioned?", gt: "Yes", good: "Tornado Cash was placed under sanctions.", bad: "No, Tornado Cash has never faced regulatory sanctions." });
-  fixtures.push({ q: "What is the pegged asset for USDT?", gt: "US Dollar", good: "Tether is pegged 1:1 to the US Dollar.", bad: "Tether is pegged to the Japanese Yen." });
-  fixtures.push({ q: "What is EIP-1559?", gt: "Base fee burn mechanism", good: "EIP-1559 introduced the dynamic base fee burn.", bad: "EIP-1559 changed proof of work to proof of stake." });
 
   let correctOrderings = 0;
   let totalGood = 0;
@@ -152,7 +154,7 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
   console.log('✓ breakdown_answer verified: [relevance, correctness, lexical, len_quality, composite]');
   console.log(`  Values: [${bView[0].toFixed(3)}, ${bView[1].toFixed(3)}, ${bView[2].toFixed(3)}, ${bView[3].toFixed(3)}, ${bView[4].toFixed(3)}]\n`);
 
-  console.log('✓ AUDIT COMPLETE: CANDIDATE SCORER EXCEEDS CHAMPION BENCHMARK FLOOR!\n');
+  console.log('✓ LOCAL BENCHMARK PASSED (Note: Hidden on-chain benchmark evaluated by Telegraph nodes).\n');
 }).catch(err => {
   console.error('Validation error:', err);
   process.exit(1);

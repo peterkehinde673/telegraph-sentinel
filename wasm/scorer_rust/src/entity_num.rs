@@ -124,7 +124,7 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
 
     let cand_nums = parse_crypto_numbers(cand_text);
     if cand_nums.is_empty() {
-        return 0.15;
+        return 0.0;
     }
 
     let mut matched_count = 0;
@@ -143,52 +143,35 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
 
     if matched_count == gt_nums.len() {
         1.0
-    } else if matched_count > 0 {
-        0.50
     } else {
-        0.01
+        0.0
     }
+}
+
+pub fn check_numeric_match(gt_text: &str, cand_text: &str) -> f32 {
+    check_numeric_consistency(gt_text, cand_text)
 }
 
 pub fn extract_crypto_entities(text: &str) -> Vec<&'static str> {
     let entities = [
-        ("bitcoin", "btc"),
-        ("btc", "btc"),
-        ("ethereum", "eth"),
-        ("ether", "eth"),
-        ("eth", "eth"),
-        ("solana", "sol"),
-        ("sol", "sol"),
+        ("bitcoin", "btc"), ("btc", "btc"),
+        ("ethereum", "eth"), ("ether", "eth"), ("eth", "eth"),
+        ("solana", "sol"), ("sol", "sol"),
         ("aave", "aave"),
-        ("cardano", "ada"),
-        ("ada", "ada"),
-        ("arbitrum", "arb"),
-        ("arb", "arb"),
-        ("optimism", "op"),
-        ("op", "op"),
-        ("uniswap", "uni"),
-        ("uni", "uni"),
-        ("chainlink", "link"),
-        ("link", "link"),
-        ("polygon", "matic"),
-        ("matic", "matic"),
-        ("pol", "matic"),
-        ("makerdao", "mkr"),
-        ("maker", "mkr"),
-        ("mkr", "mkr"),
-        ("tether", "usdt"),
-        ("usdt", "usdt"),
+        ("cardano", "ada"), ("ada", "ada"),
+        ("arbitrum", "arb"), ("arb", "arb"),
+        ("optimism", "op"), ("op", "op"),
+        ("uniswap", "uni"), ("uni", "uni"),
+        ("chainlink", "link"), ("link", "link"),
+        ("polygon", "matic"), ("matic", "matic"), ("pol", "matic"),
+        ("makerdao", "mkr"), ("maker", "mkr"), ("mkr", "mkr"),
+        ("tether", "usdt"), ("usdt", "usdt"),
         ("usdc", "usdc"),
-        ("lido", "steth"),
-        ("steth", "steth"),
-        ("avalanche", "avax"),
-        ("avax", "avax"),
-        ("binance", "bnb"),
-        ("bnb", "bnb"),
-        ("ripple", "xrp"),
-        ("xrp", "xrp"),
-        ("dogecoin", "doge"),
-        ("doge", "doge"),
+        ("lido", "steth"), ("steth", "steth"),
+        ("avalanche", "avax"), ("avax", "avax"),
+        ("binance", "bnb"), ("bnb", "bnb"),
+        ("ripple", "xrp"), ("xrp", "xrp"),
+        ("dogecoin", "doge"), ("doge", "doge"),
     ];
 
     let words = extract_words(text);
@@ -216,7 +199,7 @@ pub fn check_crypto_entity_consistency(q_text: &str, gt_text: &str, cand_text: &
 
     let cand_entities = extract_crypto_entities(cand_text);
     if cand_entities.is_empty() {
-        return 0.60;
+        return 0.50;
     }
 
     let mut matched = 0;
@@ -233,50 +216,25 @@ pub fn check_crypto_entity_consistency(q_text: &str, gt_text: &str, cand_text: &
     if matched == ref_entities.len() && !substituted_wrong {
         1.0
     } else if substituted_wrong {
-        0.02
+        0.0
     } else {
-        0.30
+        0.20
     }
 }
 
-pub fn check_currency_consistency(gt_text: &str, cand_text: &str) -> f32 {
-    let gt_lower: String = gt_text.chars().map(to_lower).collect();
+pub fn check_currency_consistency(q_text: &str, gt_text: &str, cand_text: &str) -> f32 {
+    let combined_ref = String::from(q_text) + " " + gt_text;
+    let ref_lower: String = combined_ref.chars().map(to_lower).collect();
     let cand_lower: String = cand_text.chars().map(to_lower).collect();
 
-    let currencies = [
-        ("$", "usd"),
-        ("usd", "usd"),
-        ("usdt", "usdt"),
-        ("usdc", "usdc"),
-        ("€", "eur"),
-        ("eur", "eur"),
-        ("£", "gbp"),
-        ("gbp", "gbp"),
-        ("¥", "jpy"),
-        ("jpy", "jpy"),
-    ];
+    let has_ref_eur = ref_lower.contains("eur") || ref_lower.contains('€');
+    let has_ref_usd = ref_lower.contains("usd") || ref_lower.contains('$') || ref_lower.contains("usdt") || ref_lower.contains("usdc");
 
-    let mut gt_curr = None;
-    for (sym, norm) in currencies {
-        if gt_lower.contains(sym) {
-            gt_curr = Some(norm);
-            break;
-        }
-    }
+    let has_cand_eur = cand_lower.contains("eur") || cand_lower.contains('€');
+    let has_cand_usd = cand_lower.contains("usd") || cand_lower.contains('$') || cand_lower.contains("usdt") || cand_lower.contains("usdc");
 
-    if let Some(gc) = gt_curr {
-        let mut cand_curr = None;
-        for (sym, norm) in currencies {
-            if cand_lower.contains(sym) {
-                cand_curr = Some(norm);
-                break;
-            }
-        }
-        if let Some(cc) = cand_curr {
-            if gc != cc && !((gc == "usd" && (cc == "usdt" || cc == "usdc")) || (cc == "usd" && (gc == "usdt" || gc == "usdc"))) {
-                return 0.05;
-            }
-        }
+    if (has_ref_usd && !has_ref_eur && has_cand_eur) || (has_ref_eur && !has_ref_usd && has_cand_usd && !has_cand_eur) {
+        return 0.0;
     }
     1.0
 }
@@ -307,7 +265,7 @@ pub fn check_polarity_conflict(gt_text: &str, cand_text: &str) -> f32 {
         if (gt_has_pos && !gt_has_neg && cand_has_neg && !cand_has_pos)
             || (gt_has_neg && !gt_has_pos && cand_has_pos && !cand_has_neg)
         {
-            return 0.02;
+            return 0.0;
         }
     }
     1.0

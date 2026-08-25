@@ -100,12 +100,11 @@ unsafe fn signals_from_vecs(
     ma_vec: &[f32],
 ) -> (f32, f32, f32, f32) {
     let relevance = math::cosine(q_vec, ma_vec);
-    let semantic_sim = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
-    let num_mult = entity_num::check_numeric_consistency(ground_truth, miner_answer);
+    let num_mult = entity_num::check_numeric_match(ground_truth, miner_answer);
     let entity_mult = entity_num::check_crypto_entity_consistency(question, ground_truth, miner_answer);
-    let currency_mult = entity_num::check_currency_consistency(ground_truth, miner_answer);
+    let currency_mult = entity_num::check_currency_consistency(question, ground_truth, miner_answer);
     let polarity_mult = entity_num::check_polarity_conflict(ground_truth, miner_answer);
 
     let is_exact = entity_num::contains_whole_word(miner_answer, ground_truth);
@@ -113,7 +112,7 @@ unsafe fn signals_from_vecs(
     let base_correctness = if is_exact || num_mult == 1.0 {
         0.98
     } else {
-        semantic_sim * 0.10
+        0.0
     };
 
     let correctness = base_correctness * num_mult * entity_mult * currency_mult * polarity_mult;
@@ -124,7 +123,10 @@ unsafe fn signals_from_vecs(
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    let base_quality = 0.65 + (0.20 * relevance) + (0.15 * lexical);
+    if correctness <= 0.05 {
+        return 0.0;
+    }
+    let base_quality = 0.70 + (0.20 * relevance) + (0.10 * lexical);
     let raw = correctness * base_quality * (0.95 + 0.05 * len_quality);
 
     apply_high_separation_curve(raw)
