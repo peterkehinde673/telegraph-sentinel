@@ -23,7 +23,6 @@ const IDX_LEXICAL:      usize = 2;
 const IDX_LENGTH:       usize = 3;
 const IDX_COMPOSITE:    usize = 4;
 
-// Optimized Canonical Composite Weights
 const W_RELEVANCE:   f32 = 0.20;
 const W_CORRECTNESS: f32 = 0.60;
 const W_LEXICAL:     f32 = 0.15;
@@ -63,10 +62,10 @@ fn detect_polarity_conflict(gt: &str, ma: &str) -> bool {
     let gt_l = to_lower_str(gt);
     let ma_l = to_lower_str(ma);
 
-    if (gt_l.contains("no") || gt_l.contains("false")) && (ma_l.starts_with("yes") || ma_l.contains("yes,")) {
+    if (gt_l.contains("no") || gt_l.contains("false")) && (ma_l.starts_with("yes") || ma_l.contains("yes,") || ma_l.contains("yes ")) {
         return true;
     }
-    if (gt_l.contains("yes") || gt_l.contains("true")) && (ma_l.starts_with("no") || ma_l.contains("no,")) {
+    if (gt_l.contains("yes") || gt_l.contains("true")) && (ma_l.starts_with("no") || ma_l.contains("no,") || ma_l.contains("no ")) {
         return true;
     }
     false
@@ -93,16 +92,26 @@ unsafe fn signals_from_vecs(
     miner_answer: &str,
     ma_vec: &[f32],
 ) -> (f32, f32, f32, f32) {
-    let relevance   = math::cosine(q_vec, ma_vec);
-    let mut correctness = math::cosine(gt_vec, ma_vec);
-    let lexical     = bm25::score(ground_truth, miner_answer);
+    let mut relevance   = math::cosine(q_vec, ma_vec);
+    let cosine_corr     = math::cosine(gt_vec, ma_vec);
+    let lexical         = bm25::score(ground_truth, miner_answer);
 
-    // Polarity conflict penalty
+    let gt_l = to_lower_str(ground_truth);
+    let ma_l = to_lower_str(miner_answer);
+
+    // Boost correctness when candidate directly contains or asserts ground-truth
+    let mut correctness = if ma_l.contains(&gt_l) && !gt_l.is_empty() {
+        cosine_corr.max(0.85)
+    } else {
+        cosine_corr
+    };
+
+    // Polarity conflict suppression (penalize both correctness and relevance)
     if detect_polarity_conflict(ground_truth, miner_answer) {
-        correctness *= 0.10;
+        correctness *= 0.05;
+        relevance *= 0.10;
     }
 
-    // Length quality (only rewarded if correctness is positive)
     let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0);
 
     (relevance, correctness, lexical, len_quality)
