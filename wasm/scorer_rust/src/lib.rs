@@ -58,27 +58,6 @@ fn to_lower_str(s: &str) -> String {
     out
 }
 
-// Continuous strictly monotonic cubic contrast function (d/dx > 0 everywhere)
-#[inline]
-fn apply_high_separation_curve(raw: f32) -> f32 {
-    let x = math::clamp01(raw);
-    if x <= 0.03 {
-        return 0.0;
-    }
-    if x >= 0.99 {
-        return 1.0;
-    }
-    let x3 = x * x * x;
-    let inv_x = 1.0 - x;
-    let inv_x3 = inv_x * inv_x * inv_x;
-    let den = x3 + inv_x3;
-    if den <= 0.0 {
-        0.0
-    } else {
-        math::clamp01(x3 / den)
-    }
-}
-
 #[inline]
 unsafe fn compute_signals(
     question: &str,
@@ -104,8 +83,8 @@ unsafe fn signals_from_vecs(
     miner_answer: &str,
     ma_vec: &[f32],
 ) -> (f32, f32, f32, f32) {
-    let relevance = math::cosine(q_vec, ma_vec);
-    let semantic_sim = math::cosine(gt_vec, ma_vec);
+    let mut relevance = math::cosine(q_vec, ma_vec);
+    let cosine_sim = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
     let num_mult = numeric::check_numeric_consistency(ground_truth, miner_answer);
@@ -113,29 +92,32 @@ unsafe fn signals_from_vecs(
 
     let gt_l = to_lower_str(ground_truth);
     let ma_l = to_lower_str(miner_answer);
-    let is_exact = gt_l.trim() == ma_l.trim();
 
-    let base_correctness = if is_exact {
+    // If answer directly affirms/contains ground truth, baseline correctness is high
+    let base_correctness = if gt_l == ma_l || (ma_l.contains(&gt_l) && !gt_l.is_empty()) {
         1.0
     } else {
-        semantic_sim
+        cosine_sim.max(lexical)
     };
 
+    // If polarity is in direct conflict, kill relevance so distractors cannot score on question words
+    if polarity_mult < 0.5 {
+        relevance *= 0.05;
+    }
+
     let correctness = base_correctness * num_mult * polarity_mult;
-    let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0) * correctness;
+    let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0);
 
     (relevance, correctness, lexical, len_quality)
 }
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    let base_quality = 0.65 + (0.20 * relevance) + (0.15 * lexical);
-    let raw = (W_RELEVANCE * relevance)
-            + (W_CORRECTNESS * correctness * base_quality)
-            + (W_LEXICAL * lexical * correctness)
-            + (W_LENGTH * len_quality);
-
-    apply_high_separation_curve(raw)
+    let score = (W_RELEVANCE * relevance)
+              + (W_CORRECTNESS * correctness)
+              + (W_LEXICAL * lexical)
+              + (W_LENGTH * len_quality);
+    math::clamp01(score)
 }
 
 #[no_mangle]
