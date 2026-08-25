@@ -53,11 +53,10 @@ fn to_lower_str(s: &str) -> String {
     out
 }
 
-// Strictly monotonic cubic contrast curve (d/dx > 0 everywhere)
 #[inline]
 fn apply_high_separation_curve(raw: f32) -> f32 {
     let x = math::clamp01(raw);
-    if x <= 0.05 {
+    if x <= 0.03 {
         return 0.0;
     }
     if x >= 0.99 {
@@ -104,9 +103,10 @@ unsafe fn signals_from_vecs(
     let semantic_sim = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
-    let num_multiplier = entity_num::check_numeric_consistency(ground_truth, miner_answer);
-    let entity_multiplier = entity_num::check_crypto_entity_consistency(question, ground_truth, miner_answer);
-    let polarity_multiplier = entity_num::check_polarity_conflict(ground_truth, miner_answer);
+    let num_mult = entity_num::check_numeric_consistency(ground_truth, miner_answer);
+    let entity_mult = entity_num::check_crypto_entity_consistency(question, ground_truth, miner_answer);
+    let currency_mult = entity_num::check_currency_consistency(ground_truth, miner_answer);
+    let polarity_mult = entity_num::check_polarity_conflict(ground_truth, miner_answer);
 
     let gt_l = to_lower_str(ground_truth);
     let ma_l = to_lower_str(miner_answer);
@@ -118,7 +118,7 @@ unsafe fn signals_from_vecs(
         semantic_sim
     };
 
-    let correctness = base_correctness * num_multiplier * entity_multiplier * polarity_multiplier;
+    let correctness = base_correctness * num_mult * entity_mult * currency_mult * polarity_mult;
     let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0);
 
     (relevance, correctness, lexical, len_quality)
@@ -126,7 +126,6 @@ unsafe fn signals_from_vecs(
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    // Multiplicative Gating: Correctness gates the response score
     let base_quality = 0.65 + (0.20 * relevance) + (0.15 * lexical);
     let raw = correctness * base_quality * (0.95 + 0.05 * len_quality);
 

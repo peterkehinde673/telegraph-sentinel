@@ -12,13 +12,12 @@ if (wasmBuffer[0] !== 0x00 || wasmBuffer[1] !== 0x61 || wasmBuffer[2] !== 0x73 |
 
 WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
   const ex = instance.exports;
-  const { alloc, rank_answer, rank_answer_cached, breakdown_answer, embed, cosine_sim, bm25_score, memory } = ex;
+  const { alloc, rank_answer, breakdown_answer, memory } = ex;
 
   console.log('\n================================================================');
   console.log('    TELEGRAPH WASM 104-CASE FINANCIAL BENCHMARK & AUDIT        ');
   console.log('================================================================');
 
-  // Verify all 8 exports
   const required = ['memory', 'alloc', 'dealloc', 'rank_answer', 'rank_answer_cached', 'breakdown_answer', 'embed', 'cosine_sim', 'bm25_score'];
   for (const fn of required) {
     if (!ex[fn]) throw new Error(`Missing export: ${fn}`);

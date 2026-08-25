@@ -20,7 +20,6 @@ app.use(express.static(path.join(__dirname, '../public')));
 wsServer.init(server);
 startWatchScheduler();
 
-// Production-ready dynamic CRYPTO_PRICE miner evaluation endpoint
 app.all('/api/v1/miner/risk-assessment', handleMinerRiskAssessment);
 
 app.get('/api/v1/miner/spec.yaml', (req: Request, res: Response) => {

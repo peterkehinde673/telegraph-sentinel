@@ -19,7 +19,6 @@ export async function fetchLiveCryptoPrice(symbol: string): Promise<{ price: num
   }
 
   try {
-    // 1. Query Binance public ticker endpoint
     const binanceSymbol = sym === 'USD' || sym === 'USDT' ? 'USDCUSDT' : `${sym}USDT`;
     const res = await axios.get(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`, { timeout: 3000 });
     if (res.data && res.data.lastPrice) {
@@ -29,7 +28,6 @@ export async function fetchLiveCryptoPrice(symbol: string): Promise<{ price: num
       return { price, change24h };
     }
   } catch {
-    // 2. Fallback to CoinGecko public simple price API
     try {
       const idMap: Record<string, string> = {
         BTC: 'bitcoin',
@@ -59,7 +57,7 @@ export async function fetchLiveCryptoPrice(symbol: string): Promise<{ price: num
         return { price, change24h };
       }
     } catch {
-      // Return null on upstream failure
+      // Fallback
     }
   }
 
@@ -67,10 +65,8 @@ export async function fetchLiveCryptoPrice(symbol: string): Promise<{ price: num
 }
 
 export async function handleMinerRiskAssessment(req: Request, res: Response) {
-  // Support both GET query parameters and POST JSON payloads
   let asset = (req.query?.asset || req.body?.asset || req.query?.symbol || req.body?.symbol || req.body?.query || 'ETH').toString().trim();
   
-  // Extract token symbol from natural language query if needed
   if (asset.toLowerCase().includes('price of')) {
     const parts = asset.split(/price of/i);
     if (parts[1]) asset = parts[1].replace(/[^a-zA-Z0-9]/g, '').trim();

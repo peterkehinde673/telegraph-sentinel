@@ -22,7 +22,7 @@ pub fn is_stopword(w: &str) -> bool {
         w,
         "the" | "a" | "an" | "of" | "in" | "on" | "at" | "to" | "for" | "with" | "by" | "is"
             | "are" | "was" | "were" | "it" | "and" | "or" | "as" | "what" | "who" | "did"
-            | "which" | "does" | "about" | "currently" | "trading" | "price" | "value"
+            | "which" | "does" | "about" | "currently" | "trading" | "price" | "value" | "symbol" | "ticker"
     )
 }
 
@@ -57,7 +57,6 @@ pub fn parse_crypto_numbers(text: &str) -> Vec<NumberMatch> {
                     num_str.push(curr);
                     i += 1;
                 } else if curr == ',' && i + 1 < chars.len() && is_digit(chars[i + 1]) {
-                    // Skip thousands comma
                     i += 1;
                 } else {
                     break;
@@ -67,7 +66,6 @@ pub fn parse_crypto_numbers(text: &str) -> Vec<NumberMatch> {
             let mut multiplier = 1.0;
             let mut is_pct = false;
 
-            // Check for units / multipliers / percentages
             let mut j = i;
             while j < chars.len() && chars[j] == ' ' { j += 1; }
 
@@ -77,7 +75,7 @@ pub fn parse_crypto_numbers(text: &str) -> Vec<NumberMatch> {
                     is_pct = true;
                 } else if rem.starts_with("bps") || rem.starts_with("basis points") {
                     is_pct = true;
-                    multiplier = 0.01; // 100 bps = 1%
+                    multiplier = 0.01;
                 } else if rem.starts_with("billion") || rem.starts_with('b') {
                     multiplier = 1_000_000_000.0;
                 } else if rem.starts_with("million") || rem.starts_with('m') {
@@ -121,12 +119,12 @@ pub fn parse_crypto_numbers(text: &str) -> Vec<NumberMatch> {
 pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
     let gt_nums = parse_crypto_numbers(gt_text);
     if gt_nums.is_empty() {
-        return 1.0; // No numbers to evaluate
+        return 1.0;
     }
 
     let cand_nums = parse_crypto_numbers(cand_text);
     if cand_nums.is_empty() {
-        return 0.15; // Ground truth has price/numbers but candidate has none
+        return 0.15;
     }
 
     let mut matched_count = 0;
@@ -137,7 +135,6 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
             let max_v = if gn.value > cn.value { gn.value } else { cn.value };
             let rel_diff = if max_v > 0.0 { diff / max_v } else { diff };
 
-            // 2% relative tolerance for spot price variations / rounding
             if rel_diff <= 0.02 {
                 found = true;
                 break;
@@ -151,9 +148,9 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
     if matched_count == gt_nums.len() {
         1.0
     } else if matched_count > 0 {
-        0.50
+        0.45
     } else {
-        0.01 // Severe penalty for wrong price/numerical claim
+        0.01 // Continuous severe penalty for wrong numerical value
     }
 }
 
@@ -194,22 +191,21 @@ pub fn extract_crypto_entities(text: &str) -> Vec<&'static str> {
         ("bnb", "bnb"),
         ("ripple", "xrp"),
         ("xrp", "xrp"),
-        ("doge", "doge"),
         ("dogecoin", "doge"),
+        ("doge", "doge"),
     ];
 
-    let lower: String = text.chars().map(to_lower).collect();
     let words = extract_words(text);
-    let mut found_canonical = Vec::new();
+    let mut found = Vec::new();
 
     for (name, canonical) in entities {
-        if words.iter().any(|w| w == name) || lower.contains(name) {
-            if !found_canonical.contains(&canonical) {
-                found_canonical.push(canonical);
+        if words.iter().any(|w| w == name) {
+            if !found.contains(&canonical) {
+                found.push(canonical);
             }
         }
     }
-    found_canonical
+    found
 }
 
 pub fn check_crypto_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str) -> f32 {
@@ -224,7 +220,7 @@ pub fn check_crypto_entity_consistency(q_text: &str, gt_text: &str, cand_text: &
 
     let cand_entities = extract_crypto_entities(cand_text);
     if cand_entities.is_empty() {
-        return 0.60;
+        return 0.50;
     }
 
     let mut matched = 0;
@@ -243,10 +239,52 @@ pub fn check_crypto_entity_consistency(q_text: &str, gt_text: &str, cand_text: &
     } else if matched > 0 {
         0.50
     } else if substituted_wrong {
-        0.02 // Wrong asset substitution penalty (e.g. ADA instead of SOL)
+        0.02 // Wrong asset penalty (e.g. ADA vs SOL)
     } else {
         0.20
     }
+}
+
+pub fn check_currency_consistency(gt_text: &str, cand_text: &str) -> f32 {
+    let gt_lower: String = gt_text.chars().map(to_lower).collect();
+    let cand_lower: String = cand_text.chars().map(to_lower).collect();
+
+    let currencies = [
+        ("$", "usd"),
+        ("usd", "usd"),
+        ("usdt", "usdt"),
+        ("usdc", "usdc"),
+        ("€", "eur"),
+        ("eur", "eur"),
+        ("£", "gbp"),
+        ("gbp", "gbp"),
+        ("¥", "jpy"),
+        ("jpy", "jpy"),
+    ];
+
+    let mut gt_curr = None;
+    for (sym, norm) in currencies {
+        if gt_lower.contains(sym) {
+            gt_curr = Some(norm);
+            break;
+        }
+    }
+
+    if let Some(gc) = gt_curr {
+        let mut cand_curr = None;
+        for (sym, norm) in currencies {
+            if cand_lower.contains(sym) {
+                cand_curr = Some(norm);
+                break;
+            }
+        }
+        if let Some(cc) = cand_curr {
+            if gc != cc && !((gc == "usd" && (cc == "usdt" || cc == "usdc")) || (cc == "usd" && (gc == "usdt" || gc == "usdc"))) {
+                return 0.05; // Currency conflict (e.g. EUR vs USD)
+            }
+        }
+    }
+    1.0
 }
 
 pub fn check_polarity_conflict(gt_text: &str, cand_text: &str) -> f32 {
