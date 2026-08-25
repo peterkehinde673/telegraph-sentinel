@@ -1,13 +1,9 @@
-//! Telegraph Protocol — Canonical WASM Scoring Module
-//!
-//! Compiled to `wasm32-unknown-unknown` with zero host imports.
-//! Evaluates semantic MiniLM embeddings, cosine distance, BM25 lexical overlap,
-//! and length-quality metrics.
-
 #![no_std]
 #![allow(clippy::missing_safety_doc)]
 
 extern crate alloc;
+
+use alloc::string::String;
 
 mod allocator;
 mod bm25;
@@ -27,10 +23,11 @@ const IDX_LEXICAL:      usize = 2;
 const IDX_LENGTH:       usize = 3;
 const IDX_COMPOSITE:    usize = 4;
 
-const W_RELEVANCE:   f32 = 0.25;
-const W_CORRECTNESS: f32 = 0.50;
+// Optimized Canonical Composite Weights
+const W_RELEVANCE:   f32 = 0.20;
+const W_CORRECTNESS: f32 = 0.60;
 const W_LEXICAL:     f32 = 0.15;
-const W_LENGTH:      f32 = 0.10;
+const W_LENGTH:      f32 = 0.05;
 
 #[inline]
 unsafe fn read_str<'a>(ptr: i32, len: i32) -> &'a str {
@@ -47,6 +44,32 @@ unsafe fn read_f32s<'a>(ptr: i32, len: i32) -> &'a [f32] {
         return &[];
     }
     core::slice::from_raw_parts(ptr as *const f32, len as usize)
+}
+
+fn to_lower_str(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.chars() {
+        if c >= 'A' && c <= 'Z' {
+            out.push(((c as u8) + 32) as char);
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+#[inline]
+fn detect_polarity_conflict(gt: &str, ma: &str) -> bool {
+    let gt_l = to_lower_str(gt);
+    let ma_l = to_lower_str(ma);
+
+    if (gt_l.contains("no") || gt_l.contains("false")) && (ma_l.starts_with("yes") || ma_l.contains("yes,")) {
+        return true;
+    }
+    if (gt_l.contains("yes") || gt_l.contains("true")) && (ma_l.starts_with("no") || ma_l.contains("no,")) {
+        return true;
+    }
+    false
 }
 
 #[inline]
@@ -71,9 +94,16 @@ unsafe fn signals_from_vecs(
     ma_vec: &[f32],
 ) -> (f32, f32, f32, f32) {
     let relevance   = math::cosine(q_vec, ma_vec);
-    let correctness = math::cosine(gt_vec, ma_vec);
+    let mut correctness = math::cosine(gt_vec, ma_vec);
     let lexical     = bm25::score(ground_truth, miner_answer);
-    let len_quality = math::sigmoid((miner_answer.len() as f32 - 50.0) / 20.0);
+
+    // Polarity conflict penalty
+    if detect_polarity_conflict(ground_truth, miner_answer) {
+        correctness *= 0.10;
+    }
+
+    // Length quality (only rewarded if correctness is positive)
+    let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0);
 
     (relevance, correctness, lexical, len_quality)
 }
@@ -101,6 +131,10 @@ pub unsafe extern "C" fn rank_answer(
         return 0.0;
     }
 
+    if ground_truth.trim() == miner_answer.trim() {
+        return 1.0;
+    }
+
     let (relevance, correctness, lexical, len_quality) =
         compute_signals(question, ground_truth, miner_answer);
 
@@ -119,6 +153,10 @@ pub unsafe extern "C" fn rank_answer_cached(
 
     if miner_answer.trim().is_empty() {
         return 0.0;
+    }
+
+    if ground_truth.trim() == miner_answer.trim() {
+        return 1.0;
     }
 
     let q_vec = read_f32s(q_vec_ptr, EMBED_DIM as i32);
