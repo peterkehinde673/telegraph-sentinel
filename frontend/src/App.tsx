@@ -46,32 +46,39 @@ export default function App() {
   const [wsStatus, setWsStatus] = useState<'CONNECTING' | 'CONNECTED' | 'DISCONNECTED'>('CONNECTING');
   const [alertBanner, setAlertBanner] = useState<string | null>(null);
 
-  const API_BASE = 'http://localhost:4000';
+  // Dynamic API and WebSocket URLs from environment or window.location
+  const API_BASE = (import.meta as any).env?.VITE_API_BASE_URL || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.host}` : 'http://localhost:4000');
+  const WS_URL = (import.meta as any).env?.VITE_WS_URL || (typeof window !== 'undefined' ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}` : 'ws://localhost:4000');
 
   useEffect(() => {
-    // Initial fetch of recent analyses and watch rules
     fetchRecentAnalyses();
     fetchWatchRules();
 
-    // Setup WebSocket
-    const ws = new WebSocket('ws://localhost:4000');
-    ws.onopen = () => setWsStatus('CONNECTED');
-    ws.onclose = () => setWsStatus('DISCONNECTED');
-    ws.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === 'ANALYSIS_COMPLETED') {
-          fetchRecentAnalyses();
-        } else if (msg.type === 'WATCH_ALERT') {
-          setAlertBanner(`🚨 Sentinel Watch Alert on ${msg.data.asset}: ${msg.data.trigger_reason}`);
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(WS_URL);
+      ws.onopen = () => setWsStatus('CONNECTED');
+      ws.onclose = () => setWsStatus('DISCONNECTED');
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+          if (msg.type === 'ANALYSIS_COMPLETED') {
+            fetchRecentAnalyses();
+          } else if (msg.type === 'WATCH_ALERT') {
+            setAlertBanner(`🚨 Sentinel Watch Alert on ${msg.data.asset}: ${msg.data.trigger_reason}`);
+          }
+        } catch (e) {
+          console.error('WS parse error', e);
         }
-      } catch (e) {
-        console.error('WS parse error', e);
-      }
-    };
+      };
+    } catch {
+      setWsStatus('DISCONNECTED');
+    }
 
-    return () => ws.close();
-  }, []);
+    return () => {
+      if (ws) ws.close();
+    };
+  }, [WS_URL]);
 
   const fetchRecentAnalyses = async () => {
     try {
@@ -103,10 +110,13 @@ export default function App() {
         body: JSON.stringify({ asset, action_type: actionType }),
       });
       const data = await res.json();
+      if (data.error) {
+        throw new Error(data.error);
+      }
       setResult(data);
       fetchRecentAnalyses();
     } catch (e: any) {
-      alert(`Analysis failed: ${e.message}`);
+      alert(`Analysis request failed: ${e.message}`);
     } finally {
       setLoading(false);
     }
@@ -138,7 +148,6 @@ export default function App() {
 
   return (
     <div style={{ maxWidth: '1100px', margin: '0 auto', padding: '24px 16px' }}>
-      {/* Header */}
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #30363d', paddingBottom: '16px', marginBottom: '24px' }}>
         <div>
           <h1 style={{ fontSize: '24px', fontWeight: 'bold', letterSpacing: '-0.5px' }}>TELEGRAPH SENTINEL</h1>
@@ -150,16 +159,14 @@ export default function App() {
         </div>
       </header>
 
-      {/* Alert Banner */}
       {alertBanner && (
         <div style={{ background: 'rgba(248, 81, 73, 0.15)', border: '1px solid #f85149', color: '#ff7b72', padding: '12px 16px', borderRadius: '6px', marginBottom: '20px', fontSize: '14px' }}>
           {alertBanner}
         </div>
       )}
 
-      {/* Navigation */}
       <nav style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
-        {(['ANALYZE', 'WATCH', 'HISTORY'] as const).map(tab => (
+        {(['ANALYZE', 'WATCH', 'HISTORY'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
@@ -172,7 +179,7 @@ export default function App() {
               borderRadius: '6px',
               cursor: 'pointer',
               fontWeight: 600,
-              fontSize: '13px'
+              fontSize: '13px',
             }}
           >
             {tab}
@@ -182,7 +189,6 @@ export default function App() {
 
       {activeTab === 'ANALYZE' && (
         <div>
-          {/* Controls Card */}
           <div style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: '8px', padding: '20px', marginBottom: '24px' }}>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '16px' }}>
               <div>
@@ -192,7 +198,7 @@ export default function App() {
                   value={asset}
                   onChange={(e) => setAsset(e.target.value.toUpperCase())}
                   style={{ width: '100%', padding: '10px', background: '#0d1117', border: '1px solid #30363d', color: '#fff', borderRadius: '6px', fontWeight: 600 }}
-                  placeholder="e.g. ETH, AAVE, SOL"
+                  placeholder="e.g. ETH, AAVE, SOL, BTC"
                 />
               </div>
 
@@ -222,10 +228,10 @@ export default function App() {
                     color: useFixture ? '#58a6ff' : '#8b949e',
                     borderRadius: '6px',
                     cursor: 'pointer',
-                    fontSize: '12px'
+                    fontSize: '12px',
                   }}
                 >
-                  {useFixture ? 'Mode: UI Dev Fixtures' : 'Mode: Live Telegraph Miners'}
+                  {useFixture ? 'Mode: UI Dev Fixtures' : 'Mode: Live Intelligence Oracles'}
                 </button>
               </div>
             </div>
@@ -242,10 +248,10 @@ export default function App() {
                   border: 'none',
                   borderRadius: '6px',
                   fontWeight: 700,
-                  cursor: loading ? 'not-allowed' : 'pointer'
+                  cursor: loading ? 'not-allowed' : 'pointer',
                 }}
               >
-                {loading ? 'QUERYING TELEGRAPH MINERS...' : 'RUN SENTINEL ANALYSIS'}
+                {loading ? 'CALCULATING RISK INTELLIGENCE...' : 'RUN SENTINEL ANALYSIS'}
               </button>
 
               <button
@@ -257,7 +263,7 @@ export default function App() {
                   border: '1px solid #30363d',
                   borderRadius: '6px',
                   cursor: 'pointer',
-                  fontWeight: 600
+                  fontWeight: 600,
                 }}
               >
                 + Add to Watch
@@ -265,10 +271,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* Results Display */}
           {result && (
             <div>
-              {/* Top Hierarchy: DECISION -> RISK -> CONFIDENCE */}
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px', marginBottom: '24px' }}>
                 <div style={{ background: '#161b22', border: `2px solid ${getDecisionColor(result.decision)}`, borderRadius: '8px', padding: '20px', textAlign: 'center' }}>
                   <div style={{ fontSize: '11px', color: '#8b949e', letterSpacing: '1px' }}>SENTINEL DECISION</div>
@@ -286,14 +290,13 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Signals Cards */}
-              <h2 style={{ fontSize: '16px', marginBottom: '12px', letterSpacing: '0.5px' }}>TELEGRAPH MINER SIGNALS</h2>
+              <h2 style={{ fontSize: '16px', marginBottom: '12px', letterSpacing: '0.5px' }}>INTELLIGENCE SIGNALS</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', marginBottom: '24px' }}>
                 {result.signals.map((sig, idx) => (
                   <div key={idx} style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: '8px', padding: '16px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                       <span style={{ fontWeight: 700, fontSize: '14px' }}>{sig.miner_name}</span>
-                      <span style={{ fontSize: '10px', background: '#21262d', padding: '2px 6px', borderRadius: '4px', color: '#8b949e' }}>Miner {sig.miner_id}</span>
+                      <span style={{ fontSize: '10px', background: '#21262d', padding: '2px 6px', borderRadius: '4px', color: '#8b949e' }}>ID {sig.miner_id}</span>
                     </div>
                     <div style={{ fontSize: '12px', color: '#8b949e', marginBottom: '12px' }}>Intent: {sig.intent}</div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '6px' }}>
@@ -312,7 +315,6 @@ export default function App() {
                 ))}
               </div>
 
-              {/* Evidence & Verification Panel */}
               <div style={{ background: '#161b22', border: '1px solid #30363d', borderRadius: '8px', padding: '20px' }}>
                 <h2 style={{ fontSize: '16px', marginBottom: '14px' }}>EVIDENCE & DETERMINISTIC REASONING</h2>
                 <ul style={{ listStyle: 'none', padding: 0 }}>
@@ -324,7 +326,7 @@ export default function App() {
                   ))}
                 </ul>
 
-                <h3 style={{ fontSize: '14px', marginTop: '16px', marginBottom: '8px', color: '#58a6ff' }}>TELEGRAPH PROTOCOL VERIFICATION & RECEIPTS</h3>
+                <h3 style={{ fontSize: '14px', marginTop: '16px', marginBottom: '8px', color: '#58a6ff' }}>VERIFICATION METADATA</h3>
                 <pre style={{ background: '#0d1117', padding: '12px', borderRadius: '6px', fontSize: '11px', color: '#7ee787', overflowX: 'auto' }}>
                   {JSON.stringify(result.verification_metadata, null, 2)}
                 </pre>
@@ -341,12 +343,12 @@ export default function App() {
             <p style={{ color: '#8b949e', fontSize: '13px' }}>No active monitoring rules. Add assets from the Analyze tab.</p>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              {watchRules.map(rule => (
-                <div key={rule.id} style={{ background: '#0d1117', border: '1px solid #30363d', borderRadius: '6px', padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {watchRules.map((rule) => (
+                <div key={rule.id || rule.rule_id} style={{ background: '#0d1117', border: '1px solid #30363d', borderRadius: '6px', padding: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div>
                     <strong style={{ fontSize: '15px' }}>{rule.asset}</strong>
                     <div style={{ fontSize: '12px', color: '#8b949e', marginTop: '4px' }}>
-                      Alert if Risk ≥ {rule.riskThreshold} OR Confidence &lt; {rule.confidenceThreshold}% | Interval: {rule.intervalMinutes}m
+                      Alert if Risk ≥ {rule.riskThreshold || rule.risk_threshold} OR Confidence &lt; {rule.confidenceThreshold || rule.confidence_threshold}% | Interval: {rule.intervalMinutes || rule.interval_minutes}m
                     </div>
                   </div>
                   <span style={{ fontSize: '11px', background: '#23863622', color: '#3fb950', padding: '4px 8px', borderRadius: '4px' }}>{rule.status}</span>
