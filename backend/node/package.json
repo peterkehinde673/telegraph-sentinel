@@ -1,34 +1,31 @@
 {
   "name": "telegraph-sentinel-gateway",
   "version": "0.1.0",
-  "description": "API Gateway and Telegraph Orchestration Layer for Telegraph Sentinel",
+  "description": "Telegraph Sentinel Gateway & Live Miner Oracle",
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "start": "tsx src/server.ts",
+    "start": "node dist/server.js",
     "build": "tsc",
     "test": "tsx tests/gateway.test.ts"
   },
   "dependencies": {
-    "axios": "^1.19.0",
-    "cors": "^2.8.5",
-    "dotenv": "^16.4.5",
-    "ethers": "^6.17.0",
-    "express": "^4.21.0",
-    "js-yaml": "^5.3.0",
-    "ws": "^8.21.3",
-    "zod": "^3.25.76"
-  },
-  "devDependencies": {
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
-    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.14.10",
-    "@types/ws": "^8.18.1",
-    "tsx": "^4.19.1",
-    "typescript": "^5.5.3"
+    "@types/ws": "^8.5.10",
+    "axios": "^1.7.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "ethers": "^6.13.2",
+    "express": "^4.21.0",
+    "js-yaml": "^4.1.0",
+    "typescript": "^5.5.3",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
   },
-  "allowScripts": {
-    "esbuild@0.28.2": true
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "tsx": "^4.19.1"
   }
 }
