@@ -48,7 +48,7 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
                     num_str.push(curr);
                     i += 1;
                 } else if curr == ',' && i + 1 < chars.len() && is_digit(chars[i + 1]) {
-                    i += 1; // Skip thousands separator
+                    i += 1;
                 } else {
                     break;
                 }
@@ -110,12 +110,12 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
 pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
     let gt_nums = parse_numbers(gt_text);
     if gt_nums.is_empty() {
-        return 1.0; // No numbers in ground truth -> neutral
+        return 1.0;
     }
 
     let cand_nums = parse_numbers(cand_text);
     if cand_nums.is_empty() {
-        return 0.40; // Qualitative answer without numbers
+        return 0.40;
     }
 
     let mut matched_count = 0;
@@ -125,7 +125,7 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
             let max_v = if gn.value > cn.value { gn.value } else { cn.value };
             let rel_diff = if max_v > 0.0 { diff / max_v } else { diff };
 
-            if rel_diff <= 0.02 { // 2% tolerance
+            if rel_diff <= 0.02 {
                 matched_count += 1;
                 break;
             }
@@ -137,7 +137,7 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
     } else if matched_count > 0 {
         0.50
     } else {
-        0.05 // Continuous penalty for contradictory numbers
+        0.05
     }
 }
 

@@ -59,6 +59,20 @@ fn to_lower_str(s: &str) -> String {
 }
 
 #[inline]
+fn detect_polarity_conflict(gt: &str, ma: &str) -> bool {
+    let gt_l = to_lower_str(gt);
+    let ma_l = to_lower_str(ma);
+
+    if (gt_l.contains("no") || gt_l.contains("false")) && (ma_l.starts_with("yes") || ma_l.contains("yes,") || ma_l.contains("yes ")) {
+        return true;
+    }
+    if (gt_l.contains("yes") || gt_l.contains("true")) && (ma_l.starts_with("no") || ma_l.contains("no,") || ma_l.contains("no ")) {
+        return true;
+    }
+    false
+}
+
+#[inline]
 unsafe fn compute_signals(
     question: &str,
     ground_truth: &str,
@@ -93,15 +107,13 @@ unsafe fn signals_from_vecs(
     let gt_l = to_lower_str(ground_truth);
     let ma_l = to_lower_str(miner_answer);
 
-    // If answer directly affirms/contains ground truth, baseline correctness is high
     let base_correctness = if gt_l == ma_l || (ma_l.contains(&gt_l) && !gt_l.is_empty()) {
         1.0
     } else {
         cosine_sim.max(lexical)
     };
 
-    // If polarity is in direct conflict, kill relevance so distractors cannot score on question words
-    if polarity_mult < 0.5 {
+    if detect_polarity_conflict(ground_truth, miner_answer) || polarity_mult < 0.5 {
         relevance *= 0.05;
     }
 

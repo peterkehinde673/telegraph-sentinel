@@ -6,6 +6,22 @@ Telegraph Sentinel is an autonomous pre-flight risk intelligence engine and live
 
 ---
 
+## Architecture
+
+Telegraph Sentinel consists of:
+
+1. Frontend dashboard (React + TypeScript)
+2. Node.js/TypeScript gateway/API
+3. Python/FastAPI risk-analysis engine
+4. Telegraph miner integration (Miner 207, 301, 202)
+5. WASM semantic scoring module (MiniLM-L6-v2)
+6. SQLite persistence
+7. WebSocket real-time updates
+
+[Detailed Architecture](docs/architecture.md)
+
+---
+
 ## Live Demo & Production Deployment
 
 * **24/7 Cloud Dashboard & Gateway**: [https://telegraph-sentinel-d68u.onrender.com]https://telegraph-sentinel-d68u.onrender.com)
