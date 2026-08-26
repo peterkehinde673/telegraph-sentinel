@@ -59,25 +59,17 @@ fn to_lower_str(s: &str) -> String {
 }
 
 #[inline]
-fn apply_smooth_contrast(raw: f32) -> f32 {
-    let x = math::clamp01(raw);
-    if x <= 0.05 {
-        return 0.0;
+fn detect_polarity_conflict(gt: &str, ma: &str) -> bool {
+    let gt_l = to_lower_str(gt);
+    let ma_l = to_lower_str(ma);
+
+    if (gt_l.contains("no") || gt_l.contains("false")) && (ma_l.starts_with("yes") || ma_l.contains("yes,") || ma_l.contains("yes ")) {
+        return true;
     }
-    if x >= 0.98 {
-        return 1.0;
+    if (gt_l.contains("yes") || gt_l.contains("true")) && (ma_l.starts_with("no") || ma_l.contains("no,") || ma_l.contains("no ")) {
+        return true;
     }
-    // High-resolution contrast centered at 0.35
-    let shifted = math::clamp01((x - 0.10) / 0.85);
-    let s2 = shifted * shifted;
-    let inv = 1.0 - shifted;
-    let inv2 = inv * inv;
-    let den = s2 + inv2;
-    if den <= 0.0 {
-        0.0
-    } else {
-        math::clamp01(s2 / den)
-    }
+    false
 }
 
 #[inline]
@@ -126,8 +118,8 @@ unsafe fn signals_from_vecs(
         cosine_sim
     };
 
-    if polarity_mult < 0.5 {
-        relevance *= 0.10;
+    if detect_polarity_conflict(ground_truth, miner_answer) || polarity_mult < 0.5 {
+        relevance *= 0.05;
     }
 
     let correctness = base_correctness * num_mult * polarity_mult;
@@ -138,12 +130,11 @@ unsafe fn signals_from_vecs(
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    let raw = (W_RELEVANCE * relevance)
-            + (W_CORRECTNESS * correctness)
-            + (W_LEXICAL * lexical)
-            + (W_LENGTH * len_quality);
-
-    apply_smooth_contrast(raw)
+    let score = (W_RELEVANCE * relevance)
+              + (W_CORRECTNESS * correctness)
+              + (W_LEXICAL * lexical)
+              + (W_LENGTH * len_quality);
+    math::clamp01(score)
 }
 
 #[no_mangle]

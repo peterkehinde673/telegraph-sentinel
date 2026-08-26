@@ -24,7 +24,7 @@ Telegraph Sentinel consists of:
 
 ## Live Demo & Production Deployment
 
-* [Live Production Dashboard](https://telegraph-sentinel-d68u.onrender.com)
+* [Live Production Dashboard](https://telegraph-sentinel-d68u.onrender.comi
 * **Local Development**: `http://localhost:4000`
 * **Production Miner Oracle (CQYPTO_PRICE)**: `POST https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/risk-assessment`
 * **Integrate YAML Spec**: [https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel-miner.yaml](https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel-miner.yaml)
@@ -42,7 +42,7 @@ Telegraph Sentinel consists of:
 curl -s -X POST https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/risk-assessment   -H "Content-Type: application/json"   -d '{"asset": "BTC"}'
 
 # Query ETH Spot Price (GET query format)
-curl -s "https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/risk-assessment?asset=ETH;
+curl -s "https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/risk-assessment?asset=ETH'
 ```(
 ### 2. Run Local Development Stack
 ```bash
