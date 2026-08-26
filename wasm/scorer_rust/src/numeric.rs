@@ -127,27 +127,33 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
         return 0.40;
     }
 
-    let mut matched_count = 0;
+    let mut total_grade = 0.0;
     for gn in &gt_nums {
+        let mut best_match: f32 = 0.02; // Default penalty for missing number
         for cn in &cand_nums {
             let diff = if gn.value > cn.value { gn.value - cn.value } else { cn.value - gn.value };
             let max_v = if gn.value > cn.value { gn.value } else { cn.value };
             let rel_diff = if max_v > 0.0 { diff / max_v } else { diff };
 
-            if rel_diff <= 0.02 {
-                matched_count += 1;
-                break;
+            // Graded error scaling
+            let grade = if rel_diff <= 0.005 {
+                1.00 // Exact / rounded
+            } else if rel_diff <= 0.02 {
+                0.90 // 2% tolerance
+            } else if rel_diff <= 0.05 {
+                0.50 // Moderate drift
+            } else {
+                0.02 // Wrong price
+            };
+
+            if grade > best_match {
+                best_match = grade;
             }
         }
+        total_grade += best_match;
     }
 
-    if matched_count == gt_nums.len() {
-        1.0
-    } else if matched_count > 0 {
-        0.50
-    } else {
-        0.05
-    }
+    total_grade / (gt_nums.len() as f32)
 }
 
 pub fn check_polarity_conflict(gt_text: &str, cand_text: &str) -> f32 {

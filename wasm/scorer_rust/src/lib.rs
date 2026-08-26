@@ -72,7 +72,6 @@ fn detect_polarity_conflict(gt: &str, ma: &str) -> bool {
     false
 }
 
-// Strictly monotonic cubic separation curve (d/dx > 0 everywhere)
 #[inline]
 fn apply_high_separation_curve(raw: f32) -> f32 {
     let x = math::clamp01(raw);
@@ -143,8 +142,8 @@ unsafe fn signals_from_vecs(
 
     let base_correctness = if is_exact || is_boolean_affirmation || (key_recall >= 0.60 && !gt_has_nums) {
         1.0
-    } else if contains_gt || (gt_has_nums && num_mult == 1.0) {
-        cosine_sim.max(0.88)
+    } else if contains_gt || (gt_has_nums && num_mult >= 0.90) {
+        cosine_sim.max(0.95) // Un-capped floor for verified factual matches
     } else {
         cosine_sim * 0.15
     };
