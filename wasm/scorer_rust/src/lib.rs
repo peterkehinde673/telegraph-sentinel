@@ -58,37 +58,18 @@ fn to_lower_str(s: &str) -> String {
     out
 }
 
+// Smooth strictly monotonic contrast curve (d/dx > 0 everywhere)
 #[inline]
-fn detect_polarity_conflict(gt: &str, ma: &str) -> bool {
-    let gt_l = to_lower_str(gt);
-    let ma_l = to_lower_str(ma);
-
-    if (gt_l.contains("no") || gt_l.contains("false")) && (ma_l.starts_with("yes") || ma_l.contains("yes,") || ma_l.contains("yes ")) {
-        return true;
-    }
-    if (gt_l.contains("yes") || gt_l.contains("true")) && (ma_l.starts_with("no") || ma_l.contains("no,") || ma_l.contains("no ")) {
-        return true;
-    }
-    false
-}
-
-#[inline]
-fn apply_high_separation_curve(raw: f32) -> f32 {
+fn apply_smooth_contrast(raw: f32) -> f32 {
     let x = math::clamp01(raw);
-    if x <= 0.03 {
-        return 0.0;
-    }
-    if x >= 0.99 {
-        return 1.0;
-    }
-    let x3 = x * x * x;
+    let x2 = x * x;
     let inv_x = 1.0 - x;
-    let inv_x3 = inv_x * inv_x * inv_x;
-    let den = x3 + inv_x3;
+    let inv_x2 = inv_x * inv_x;
+    let den = x2 + inv_x2;
     if den <= 0.0 {
         0.0
     } else {
-        math::clamp01(x3 / den)
+        math::clamp01(x2 / den)
     }
 }
 
@@ -106,65 +87,54 @@ unsafe fn compute_signals(
     let gt_vec = embed::run(&gt_enc);
     let ma_vec = embed::run(&ma_enc);
 
-    signals_from_vecs(&q_vec, &gt_vec, ground_truth, miner_answer, &ma_vec)
+    signals_from_vecs(&q_vec, &gt_vec, question, ground_truth, miner_answer, &ma_vec)
 }
 
 #[inline]
 unsafe fn signals_from_vecs(
     q_vec: &[f32],
     gt_vec: &[f32],
+    question: &str,
     ground_truth: &str,
     miner_answer: &str,
     ma_vec: &[f32],
 ) -> (f32, f32, f32, f32) {
-    let mut relevance = math::cosine(q_vec, ma_vec);
-    let cosine_sim = math::cosine(gt_vec, ma_vec);
+    let relevance = math::cosine(q_vec, ma_vec);
+    let semantic_sim = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
     let num_mult = numeric::check_numeric_consistency(ground_truth, miner_answer);
-    let polarity_mult = numeric::check_polarity_conflict(ground_truth, miner_answer);
-
-    let gt_nums = numeric::parse_numbers(ground_truth);
-    let gt_has_nums = !gt_nums.is_empty();
+    let entity_mult = numeric::check_entity_consistency(question, ground_truth, miner_answer);
+    let polarity_mult = numeric::check_polarity_and_negation(ground_truth, miner_answer);
 
     let gt_l = to_lower_str(ground_truth);
     let ma_l = to_lower_str(miner_answer);
-
     let is_exact = gt_l.trim() == ma_l.trim();
     let contains_gt = ma_l.contains(&gt_l) && !gt_l.is_empty();
-    let key_recall = numeric::check_keyword_recall(ground_truth, miner_answer);
 
-    let is_boolean_affirmation = (gt_l == "yes" || gt_l == "true") &&
-        !ma_l.contains("no") &&
-        !ma_l.contains("never") &&
-        !ma_l.contains("not") &&
-        relevance >= 0.50;
-
-    let base_correctness = if is_exact || is_boolean_affirmation || (key_recall >= 0.60 && !gt_has_nums) {
+    let base_correctness = if is_exact {
         1.0
-    } else if contains_gt || (gt_has_nums && num_mult >= 0.90) {
-        cosine_sim.max(0.95) // Un-capped floor for verified factual matches
+    } else if contains_gt || num_mult == 1.0 {
+        semantic_sim.max(0.85)
     } else {
-        cosine_sim * 0.15
+        semantic_sim
     };
 
-    if detect_polarity_conflict(ground_truth, miner_answer) || polarity_mult < 0.5 {
-        relevance *= 0.05;
-    }
-
-    let correctness = base_correctness * num_mult * polarity_mult;
+    let factual_multiplier = num_mult * entity_mult * polarity_mult;
+    let correctness = base_correctness * factual_multiplier;
     let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0);
 
-    (relevance, correctness, lexical, len_quality)
+    (relevance * factual_multiplier, correctness, lexical * factual_multiplier, len_quality)
 }
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    let score = (W_RELEVANCE * relevance)
-              + (W_CORRECTNESS * correctness)
-              + (W_LEXICAL * lexical)
-              + (W_LENGTH * len_quality);
-    apply_high_separation_curve(score)
+    let raw = (W_RELEVANCE * relevance)
+            + (W_CORRECTNESS * correctness)
+            + (W_LEXICAL * lexical)
+            + (W_LENGTH * len_quality * correctness);
+
+    apply_smooth_contrast(raw)
 }
 
 #[no_mangle]
@@ -215,7 +185,7 @@ pub unsafe extern "C" fn rank_answer_cached(
     let ma_vec = embed::run(&ma_enc);
 
     let (relevance, correctness, lexical, len_quality) =
-        signals_from_vecs(q_vec, gt_vec, ground_truth, miner_answer, &ma_vec);
+        signals_from_vecs(q_vec, gt_vec, "", ground_truth, miner_answer, &ma_vec);
 
     composite(relevance, correctness, lexical, len_quality)
 }
