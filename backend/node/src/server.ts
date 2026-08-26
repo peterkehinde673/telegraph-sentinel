@@ -9,7 +9,7 @@ import { wsServer } from './websocket';
 import { addWatchRule, getWatchRules, deleteWatchRule, startWatchScheduler } from './watch';
 import { saveAnalysis, listAnalyses } from './database';
 import { generateDefaultSentinelYaml, serializeToYaml, parseAndValidateYaml } from './telegraph/yaml';
-import { TELEGRAPH_REGISTRY_CONFIG } from './telegraph/onchain';
+import { TELEGRAPH_REGISTRY_CONFIG, validateRegistrationParams, encodeRegistrationTransaction } from './telegraph/onchain';
 import { handleMinerRiskAssessment, fetchLiveCryptoPrice } from './miner_endpoint';
 
 const app = express();
@@ -18,18 +18,12 @@ const server = http.createServer(app);
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
-// Serve static frontend dashboard
 app.use(express.static(path.join(__dirname, '../public')));
 
-// Initialize WebSockets and Watch Scheduler
 wsServer.init(server);
 startWatchScheduler();
 
-// ==========================================
-// 1. TELEGRAPH MINER API ROUTES
-// ==========================================
-
+// Telegraph Miner Endpoints
 app.all('/api/v1/miner/risk-assessment', handleMinerRiskAssessment);
 
 app.get('/api/v1/miner/spec.yaml', (req: Request, res: Response) => {
@@ -46,10 +40,21 @@ app.get('/api/v1/miner/contract-config', (_req: Request, res: Response) => {
   res.json(TELEGRAPH_REGISTRY_CONFIG);
 });
 
-// ==========================================
-// 2. SENTINEL CORE ANALYSIS API (FOR FRONTEND)
-// ==========================================
+app.post('/api/v1/miner/onchain/encode-register', (req: Request, res: Response) => {
+  const validation = validateRegistrationParams(req.body);
+  if (!validation.valid) {
+    res.status(400).json({ error: 'Validation Error', errors: validation.errors });
+    return;
+  }
+  const encoded = encodeRegistrationTransaction(req.body);
+  res.json({
+    ...encoded,
+    chainIdentifier: TELEGRAPH_REGISTRY_CONFIG.caip2,
+    chainId: TELEGRAPH_REGISTRY_CONFIG.chainId,
+  });
+});
 
+// Sentinel Core Analysis API
 app.post('/api/analyze', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const asset = (req.body.asset || 'ETH').toString().trim().toUpperCase();
@@ -115,7 +120,6 @@ app.post('/api/analyze', async (req: Request, res: Response, next: NextFunction)
 
     let risk_score = (signals[0].risk_signal * 0.30) + (signals[1].risk_signal * 0.35) + (signals[2].risk_signal * 0.35);
     risk_score = Math.round(risk_score * 100) / 100;
-
     const confidence_score = Math.round(((signals[0].confidence + signals[1].confidence + signals[2].confidence) / 3) * 100) / 100;
 
     let decision: 'APPROVE' | 'REVIEW' | 'HIGH_RISK_REVIEW' | 'BLOCK' = 'APPROVE';
@@ -159,14 +163,12 @@ app.post('/api/analyze', async (req: Request, res: Response, next: NextFunction)
 
     await saveAnalysis(result);
     wsServer.broadcast('ANALYSIS_COMPLETED', result);
-
     res.status(200).json(result);
   } catch (err) {
     next(err);
   }
 });
 
-// Status Endpoint (Required by Gateway Tests)
 app.get('/api/status', (_req: Request, res: Response) => {
   res.status(200).json({
     gateway: 'active',
@@ -178,7 +180,6 @@ app.get('/api/status', (_req: Request, res: Response) => {
   });
 });
 
-// Analyses History
 app.get('/api/analyses', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const rows = await listAnalyses(25);
@@ -188,7 +189,6 @@ app.get('/api/analyses', async (_req: Request, res: Response, next: NextFunction
   }
 });
 
-// Watch Rules CRUD
 app.get('/api/watch', (_req: Request, res: Response) => {
   res.status(200).json({ rules: getWatchRules() });
 });
@@ -199,7 +199,6 @@ app.post('/api/watch', (req: Request, res: Response) => {
     res.status(400).json({ error: 'Asset is required for watch rule', status: 400 });
     return;
   }
-
   const rule = addWatchRule({
     asset: asset.toString().toUpperCase(),
     mode,
@@ -207,7 +206,6 @@ app.post('/api/watch', (req: Request, res: Response) => {
     confidenceThreshold: Number(confidenceThreshold),
     intervalMinutes: Number(intervalMinutes),
   });
-
   res.status(201).json(rule);
 });
 
@@ -220,21 +218,14 @@ app.delete('/api/watch/:id', (req: Request, res: Response) => {
   res.status(200).json({ status: 'deleted', id: req.params.id });
 });
 
-// Health Endpoint
 app.get('/health', (_req: Request, res: Response) => {
   res.status(200).json({
     status: 'healthy',
     service: 'sentinel-node-gateway',
     timestamp: new Date().toISOString(),
-    downstream: {
-      python_risk_engine: {
-        status: 'connected',
-      },
-    },
   });
 });
 
-// Strict JSON 404 Handler for all /api/* routes
 app.all('/api/*', (req: Request, res: Response) => {
   res.status(404).json({
     error: `API route '${req.method} ${req.originalUrl}' not found`,
@@ -242,7 +233,6 @@ app.all('/api/*', (req: Request, res: Response) => {
   });
 });
 
-// Central Error Handler
 app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
   res.status(err.status || 500).json({
     error: err.message || 'Internal Server Error',
