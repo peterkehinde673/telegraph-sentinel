@@ -17,6 +17,15 @@ fn to_lower(c: char) -> char {
     }
 }
 
+pub fn is_stopword(w: &str) -> bool {
+    matches!(
+        w,
+        "the" | "a" | "an" | "of" | "in" | "on" | "at" | "to" | "for" | "with" | "by" | "is"
+            | "are" | "was" | "were" | "it" | "and" | "or" | "as" | "what" | "who" | "did"
+            | "which" | "does" | "about" | "currently" | "trading" | "price" | "value" | "symbol" | "ticker" | "mechanism"
+    )
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct NumberMatch {
     pub value: f64,
@@ -171,4 +180,45 @@ pub fn check_polarity_conflict(gt_text: &str, cand_text: &str) -> f32 {
         }
     }
     1.0
+}
+
+pub fn extract_words(text: &str) -> Vec<String> {
+    let mut words = Vec::new();
+    let chars: Vec<char> = text.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        if is_alpha(chars[i]) || is_digit(chars[i]) {
+            let mut w = String::new();
+            while i < chars.len() && (is_alpha(chars[i]) || is_digit(chars[i])) {
+                w.push(to_lower(chars[i]));
+                i += 1;
+            }
+            if !w.is_empty() {
+                words.push(w);
+            }
+        } else {
+            i += 1;
+        }
+    }
+    words
+}
+
+pub fn check_keyword_recall(gt_text: &str, cand_text: &str) -> f32 {
+    let all_gt = extract_words(gt_text);
+    let key_gt: Vec<&String> = all_gt.iter().filter(|w| !is_stopword(w.as_str())).collect();
+    let effective = if key_gt.is_empty() { all_gt.iter().collect::<Vec<&String>>() } else { key_gt };
+
+    if effective.is_empty() { return 1.0; }
+    let cand_words = extract_words(cand_text);
+    if cand_words.is_empty() { return 0.0; }
+
+    let mut matched = 0;
+    for &gw in &effective {
+        if cand_words.iter().any(|cw| cw == gw || cw.starts_with(gw.as_str()) || gw.starts_with(cw.as_str())) {
+            matched += 1;
+        }
+    }
+
+    (matched as f32) / (effective.len() as f32)
 }

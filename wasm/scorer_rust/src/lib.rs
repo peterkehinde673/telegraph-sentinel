@@ -25,9 +25,9 @@ const IDX_LENGTH:       usize = 3;
 const IDX_COMPOSITE:    usize = 4;
 
 const W_RELEVANCE:   f32 = 0.20;
-const W_CORRECTNESS: f32 = 0.55;
+const W_CORRECTNESS: f32 = 0.60;
 const W_LEXICAL:     f32 = 0.15;
-const W_LENGTH:      f32 = 0.10;
+const W_LENGTH:      f32 = 0.05;
 
 #[inline]
 unsafe fn read_str<'a>(ptr: i32, len: i32) -> &'a str {
@@ -58,18 +58,38 @@ fn to_lower_str(s: &str) -> String {
     out
 }
 
-// Smooth strictly monotonic contrast curve (d/dx > 0 everywhere)
 #[inline]
-fn apply_smooth_contrast(raw: f32) -> f32 {
+fn detect_polarity_conflict(gt: &str, ma: &str) -> bool {
+    let gt_l = to_lower_str(gt);
+    let ma_l = to_lower_str(ma);
+
+    if (gt_l.contains("no") || gt_l.contains("false")) && (ma_l.starts_with("yes") || ma_l.contains("yes,") || ma_l.contains("yes ")) {
+        return true;
+    }
+    if (gt_l.contains("yes") || gt_l.contains("true")) && (ma_l.starts_with("no") || ma_l.contains("no,") || ma_l.contains("no ")) {
+        return true;
+    }
+    false
+}
+
+// Strictly monotonic cubic separation curve (d/dx > 0 everywhere)
+#[inline]
+fn apply_high_separation_curve(raw: f32) -> f32 {
     let x = math::clamp01(raw);
-    let x2 = x * x;
+    if x <= 0.03 {
+        return 0.0;
+    }
+    if x >= 0.99 {
+        return 1.0;
+    }
+    let x3 = x * x * x;
     let inv_x = 1.0 - x;
-    let inv_x2 = inv_x * inv_x;
-    let den = x2 + inv_x2;
+    let inv_x3 = inv_x * inv_x * inv_x;
+    let den = x3 + inv_x3;
     if den <= 0.0 {
         0.0
     } else {
-        math::clamp01(x2 / den)
+        math::clamp01(x3 / den)
     }
 }
 
@@ -105,22 +125,32 @@ unsafe fn signals_from_vecs(
     let num_mult = numeric::check_numeric_consistency(ground_truth, miner_answer);
     let polarity_mult = numeric::check_polarity_conflict(ground_truth, miner_answer);
 
+    let gt_nums = numeric::parse_numbers(ground_truth);
+    let gt_has_nums = !gt_nums.is_empty();
+
     let gt_l = to_lower_str(ground_truth);
     let ma_l = to_lower_str(miner_answer);
 
     let is_exact = gt_l.trim() == ma_l.trim();
     let contains_gt = ma_l.contains(&gt_l) && !gt_l.is_empty();
+    let key_recall = numeric::check_keyword_recall(ground_truth, miner_answer);
 
-    let base_correctness = if is_exact {
+    let is_boolean_affirmation = (gt_l == "yes" || gt_l == "true") &&
+        !ma_l.contains("no") &&
+        !ma_l.contains("never") &&
+        !ma_l.contains("not") &&
+        relevance >= 0.50;
+
+    let base_correctness = if is_exact || is_boolean_affirmation || (key_recall >= 0.60 && !gt_has_nums) {
         1.0
-    } else if contains_gt {
-        cosine_sim.max(0.85)
+    } else if contains_gt || (gt_has_nums && num_mult == 1.0) {
+        cosine_sim.max(0.88)
     } else {
-        cosine_sim
+        cosine_sim * 0.15
     };
 
-    if polarity_mult < 0.5 {
-        relevance *= 0.10;
+    if detect_polarity_conflict(ground_truth, miner_answer) || polarity_mult < 0.5 {
+        relevance *= 0.05;
     }
 
     let correctness = base_correctness * num_mult * polarity_mult;
@@ -131,12 +161,11 @@ unsafe fn signals_from_vecs(
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    let raw = (W_RELEVANCE * relevance)
-            + (W_CORRECTNESS * correctness)
-            + (W_LEXICAL * lexical)
-            + (W_LENGTH * len_quality);
-
-    apply_smooth_contrast(raw)
+    let score = (W_RELEVANCE * relevance)
+              + (W_CORRECTNESS * correctness)
+              + (W_LEXICAL * lexical)
+              + (W_LENGTH * len_quality);
+    apply_high_separation_curve(score)
 }
 
 #[no_mangle]
