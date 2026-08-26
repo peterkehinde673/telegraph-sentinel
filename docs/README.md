@@ -24,9 +24,9 @@ Telegraph Sentinel consists of:
 
 ## Live Demo & Production Deployment
 
-* **24/7 Cloud Dashboard & Gateway**: [https://telegraph-sentinel-d68u.onrender.com]https://telegraph-sentinel-d68u.onrender.com)
-* **Local Development Server**: `http://localhost:4000`
-* **Live Miner Oracle (CRYPTO_PRICE)**: `POST https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/risk-assessment`
+* [Live Production Dashboard](https://telegraph-sentinel-d68u.onrender.com)
+* **Local Development**: `http://localhost:4000`
+* **Production Miner Oracle (CQYPTO_PRICE)**: `POST https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/risk-assessment`
 * **Integrate YAML Spec**: [https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel-miner.yaml](https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel-miner.yaml)
 * **WASM Candidate Scorer**: [https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel_scorer.wasm](https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel_scorer.wasm)
 
@@ -42,9 +42,8 @@ Telegraph Sentinel consists of:
 curl -s -X POST https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/risk-assessment   -H "Content-Type: application/json"   -d '{"asset": "BTC"}'
 
 # Query ETH Spot Price (GET query format)
-curl -s "https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/risk-assessment?asset=ETH"
-```
-
+curl -s "https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/risk-assessment?asset=ETH;
+```(
 ### 2. Run Local Development Stack
 ```bash
 cd backend/node
@@ -55,5 +54,5 @@ node dist/server.js
 
 ### 3. Validate WASM Candidate Scorer
 ```bash
-node wasm/validate_scorer.jsc
+node wasm/validate_scorer.js
 ```

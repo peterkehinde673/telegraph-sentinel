@@ -48,7 +48,7 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
                     num_str.push(curr);
                     i += 1;
                 } else if curr == ',' && i + 1 < chars.len() && is_digit(chars[i + 1]) {
-                    i += 1;
+                    i += 1; // Skip thousands separator
                 } else {
                     break;
                 }

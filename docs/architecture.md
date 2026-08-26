@@ -1,6 +1,10 @@
-# Telegraph Sentinel Architecture
+# Telegraph Sentinel — System Architecture
 
-## Overview
-Telegraph Sentinel provides deterministic crypto/DeFi risk intelligence by orchestrating decentralized Telegraph Miner signals, evaluating them through a mathematical scoring engine, and presenting transparent decisions.
-
-## System Topology
+graph TD
+    A React Dashboard -->|HTTP / WebScoket| B[Node.js / Express Gateway]
+    B -->|Internal HTTP| C[Python / FastAPI Risk Engine]
+    B -->|xt02 Payments / EVM| D[Base Sepolia Registry]
+    B -->|Orchestration| E[Telegraph Miners 207, 301, 202]
+    E -->|Signal Intelligence} C
+    C -->|Audit Trails| F[SQLite Persistence]
+    G Telegraph Challenger Evaluator -->|Wasm Ranking| H[Telegraph Sentinel WASM Scorer]
