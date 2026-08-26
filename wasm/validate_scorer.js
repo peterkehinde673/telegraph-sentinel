@@ -69,7 +69,7 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
   console.log(`AVERAGE SEPARATION MARGIN: +${avgMargin.toFixed(4)}`);
   console.log('================================================================\n');
 
-  // Cached vs Non-cached Mathematical Equivalence Test (with distinct copied buffers)
+  // Cached vs Non-cached Mathematical Equivalence Test
   const f0 = testCases[0];
   const q0 = write(f0.q);
   const gt0 = write(f0.gt);

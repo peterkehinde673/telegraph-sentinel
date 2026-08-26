@@ -24,7 +24,7 @@ Telegraph Sentinel consists of:
 
 ## Live Demo & Production Deployment
 
-* [Live Production Dashboard](https://telegraph-sentinel-d68u.onrender.comi
+* [Live Production Dashboard](https://telegraph-sentinel-d68u.onrender.com)
 * **Local Development**: `http://localhost:4000`
 * **Production Miner Oracle (CQYPTO_PRICE)**: `POST https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/risk-assessment`
 * **Integrate YAML Spec**: [https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel-miner.yaml](https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel-miner.yaml)

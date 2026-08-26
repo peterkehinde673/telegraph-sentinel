@@ -25,9 +25,9 @@ const IDX_LENGTH:       usize = 3;
 const IDX_COMPOSITE:    usize = 4;
 
 const W_RELEVANCE:   f32 = 0.20;
-const W_CORRECTNESS: f32 = 0.60;
+const W_CORRECTNESS: f32 = 0.55;
 const W_LEXICAL:     f32 = 0.15;
-const W_LENGTH:      f32 = 0.05;
+const W_LENGTH:      f32 = 0.10;
 
 #[inline]
 unsafe fn read_str<'a>(ptr: i32, len: i32) -> &'a str {
@@ -58,18 +58,19 @@ fn to_lower_str(s: &str) -> String {
     out
 }
 
+// Smooth strictly monotonic contrast curve (d/dx > 0 everywhere)
 #[inline]
-fn detect_polarity_conflict(gt: &str, ma: &str) -> bool {
-    let gt_l = to_lower_str(gt);
-    let ma_l = to_lower_str(ma);
-
-    if (gt_l.contains("no") || gt_l.contains("false")) && (ma_l.starts_with("yes") || ma_l.contains("yes,") || ma_l.contains("yes ")) {
-        return true;
+fn apply_smooth_contrast(raw: f32) -> f32 {
+    let x = math::clamp01(raw);
+    let x2 = x * x;
+    let inv_x = 1.0 - x;
+    let inv_x2 = inv_x * inv_x;
+    let den = x2 + inv_x2;
+    if den <= 0.0 {
+        0.0
+    } else {
+        math::clamp01(x2 / den)
     }
-    if (gt_l.contains("yes") || gt_l.contains("true")) && (ma_l.starts_with("no") || ma_l.contains("no,") || ma_l.contains("no ")) {
-        return true;
-    }
-    false
 }
 
 #[inline]
@@ -118,8 +119,8 @@ unsafe fn signals_from_vecs(
         cosine_sim
     };
 
-    if detect_polarity_conflict(ground_truth, miner_answer) || polarity_mult < 0.5 {
-        relevance *= 0.05;
+    if polarity_mult < 0.5 {
+        relevance *= 0.10;
     }
 
     let correctness = base_correctness * num_mult * polarity_mult;
@@ -130,11 +131,12 @@ unsafe fn signals_from_vecs(
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    let score = (W_RELEVANCE * relevance)
-              + (W_CORRECTNESS * correctness)
-              + (W_LEXICAL * lexical)
-              + (W_LENGTH * len_quality);
-    math::clamp01(score)
+    let raw = (W_RELEVANCE * relevance)
+            + (W_CORRECTNESS * correctness)
+            + (W_LEXICAL * lexical)
+            + (W_LENGTH * len_quality);
+
+    apply_smooth_contrast(raw)
 }
 
 #[no_mangle]
