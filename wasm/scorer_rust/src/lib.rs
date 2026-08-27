@@ -4,6 +4,7 @@
 extern crate alloc;
 
 use alloc::string::String;
+use libm::powf;
 
 mod allocator;
 mod bm25;
@@ -58,6 +59,7 @@ fn to_lower_str(s: &str) -> String {
     out
 }
 
+// Strictly monotonic power contrast curve (d/dx > 0 everywhere)
 #[inline]
 fn apply_high_separation_curve(raw: f32) -> f32 {
     let x = math::clamp01(raw);
@@ -67,14 +69,13 @@ fn apply_high_separation_curve(raw: f32) -> f32 {
     if x >= 0.99 {
         return 1.0;
     }
-    let x3 = x * x * x;
-    let inv_x = 1.0 - x;
-    let inv_x3 = inv_x * inv_x * inv_x;
-    let den = x3 + inv_x3;
+    let x_pow = powf(x, 2.5);
+    let inv_pow = powf(1.0 - x, 2.5);
+    let den = x_pow + inv_pow;
     if den <= 0.0 {
         0.0
     } else {
-        math::clamp01(x3 / den)
+        math::clamp01(x_pow / den)
     }
 }
 
@@ -105,48 +106,33 @@ unsafe fn signals_from_vecs(
     ma_vec: &[f32],
 ) -> (f32, f32, f32, f32) {
     let relevance = math::cosine(q_vec, ma_vec);
-    let cosine_sim = math::cosine(gt_vec, ma_vec);
+    let semantic_sim = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
     let num_mult = numeric::check_numeric_consistency(ground_truth, miner_answer);
     let entity_mult = numeric::check_entity_consistency(question, ground_truth, miner_answer);
+    let currency_mult = numeric::check_currency_consistency(question, ground_truth, miner_answer);
     let polarity_mult = numeric::check_polarity_and_negation(ground_truth, miner_answer);
-
-    let gt_nums = numeric::parse_numbers(ground_truth);
-    let gt_has_nums = !gt_nums.is_empty();
 
     let gt_l = to_lower_str(ground_truth);
     let ma_l = to_lower_str(miner_answer);
     let is_exact = gt_l.trim() == ma_l.trim();
 
-    let contains_gt_word = numeric::contains_whole_word(miner_answer, ground_truth);
-
-    let is_boolean_match = if gt_l == "no" || gt_l == "false" {
-        (ma_l.starts_with("no") || ma_l.contains("no ") || ma_l.contains("not ") || ma_l.contains("never")) && !ma_l.starts_with("yes")
-    } else if gt_l == "yes" || gt_l == "true" {
-        (ma_l.starts_with("yes") || ma_l.contains("yes ") || ma_l.contains("confirmed")) && !ma_l.contains("not") && !ma_l.contains("no")
-    } else {
-        false
-    };
-
+    let factual_multiplier = num_mult * entity_mult * currency_mult * polarity_mult;
     let base_correctness = if is_exact {
         1.0
-    } else if is_boolean_match || contains_gt_word || (gt_has_nums && num_mult >= 0.90) {
-        cosine_sim.max(0.92)
     } else {
-        cosine_sim * 0.05
+        (semantic_sim * 0.65 + lexical * 0.35) * factual_multiplier
     };
 
-    let factual_multiplier = num_mult * entity_mult * polarity_mult;
-    let correctness = base_correctness * factual_multiplier;
     let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0);
 
-    (relevance * factual_multiplier, correctness, lexical * factual_multiplier, len_quality)
+    (relevance, base_correctness, lexical, len_quality)
 }
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    let base_quality = 0.65 + (0.20 * relevance) + (0.15 * lexical);
+    let base_quality = 0.60 + (0.25 * relevance) + (0.15 * lexical);
     let raw = correctness * base_quality * (0.95 + 0.05 * len_quality);
 
     apply_high_separation_curve(raw)

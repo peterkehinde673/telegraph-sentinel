@@ -4,12 +4,18 @@ const path = require('path');
 const wasmPath = path.resolve(__dirname, 'dist/telegraph_sentinel_scorer.wasm');
 const wasmBuffer = fs.readFileSync(wasmPath);
 
+// Verify WebAssembly magic header (\0asm)
+if (wasmBuffer[0] !== 0x00 || wasmBuffer[1] !== 0x61 || wasmBuffer[2] !== 0x73 || wasmBuffer[3] !== 0x6d) {
+  console.error('✗ Invalid WASM binary header');
+  process.exit(1);
+}
+
 WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
   const ex = instance.exports;
   const { alloc, rank_answer, rank_answer_cached, breakdown_answer, embed, memory } = ex;
 
   console.log('\n================================================================');
-  console.log('    TELEGRAPH WASM 104-CASE FINANCIAL BENCHMARK & AUDIT        ');
+  console.log('    TELEGRAPH CANONICAL SEMANTIC WASM SCORER AUDIT & HOLDOUT    ');
   console.log('================================================================');
 
   function write(str) {
@@ -21,7 +27,6 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
     return { ptr, len: buf.length };
   }
 
-  // 104 Multi-Tier Adversarial Test Cases
   const assets = [
     { name: "Bitcoin", sym: "BTC", price: "$65,400", badPrice: "$12,000", wrongSym: "LTC" },
     { name: "Ethereum", sym: "ETH", price: "$3,480", badPrice: "$850", wrongSym: "ETC" },
@@ -75,7 +80,7 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
   const avgBad = totalBad / testCases.length;
   const avgMargin = totalMargin / testCases.length;
 
-  console.log('\n================================================================');
+  console.log('================================================================');
   console.log(`TOTAL FIXTURES:            ${testCases.length}`);
   console.log(`ORDERING ACCURACY:         ${correctOrderings} / ${testCases.length} (${((correctOrderings / testCases.length) * 100).toFixed(1)}%)`);
   console.log(`AVERAGE GOOD SCORE:        ${avgGood.toFixed(4)}`);

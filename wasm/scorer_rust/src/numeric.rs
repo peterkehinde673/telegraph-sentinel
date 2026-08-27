@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use alloc::string::String;
+use libm::exp;
 
 fn is_digit(c: char) -> bool {
     c >= '0' && c <= '9'
@@ -22,7 +23,7 @@ pub fn is_stopword(w: &str) -> bool {
         w,
         "the" | "a" | "an" | "of" | "in" | "on" | "at" | "to" | "for" | "with" | "by" | "is"
             | "are" | "was" | "were" | "it" | "and" | "or" | "as" | "what" | "who" | "did"
-            | "which" | "does" | "about" | "currently" | "trading" | "price" | "value" | "symbol" | "ticker" | "spot"
+            | "which" | "does" | "about" | "currently" | "trading" | "price" | "value" | "symbol" | "ticker" | "near" | "around" | "approximately" | "spot"
     )
 }
 
@@ -57,7 +58,7 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
                     num_str.push(curr);
                     i += 1;
                 } else if curr == ',' && i + 1 < chars.len() && is_digit(chars[i + 1]) {
-                    i += 1;
+                    i += 1; // Skip thousands comma
                 } else {
                     break;
                 }
@@ -124,30 +125,39 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
 
     let cand_nums = parse_numbers(cand_text);
     if cand_nums.is_empty() {
-        return 0.40;
+        return 0.35; // Partial credit for qualitative answer without numbers
     }
 
-    let mut matched_count = 0;
+    let mut total_score = 0.0;
+    let mut conflicting_extra = 0;
+
     for gn in &gt_nums {
+        let mut best_match: f64 = 0.02;
         for cn in &cand_nums {
             let diff = if gn.value > cn.value { gn.value - cn.value } else { cn.value - gn.value };
             let max_v = if gn.value > cn.value { gn.value } else { cn.value };
             let rel_diff = if max_v > 0.0 { diff / max_v } else { diff };
 
-            if rel_diff <= 0.02 {
-                matched_count += 1;
-                break;
+            // Smooth continuous Gaussian relative error scaling
+            let match_score = exp(-35.0 * rel_diff * rel_diff);
+            if match_score > best_match {
+                best_match = match_score;
+            }
+            if rel_diff > 0.15 {
+                conflicting_extra += 1;
             }
         }
+        total_score += best_match;
     }
 
-    if matched_count == gt_nums.len() {
-        1.0
-    } else if matched_count > 0 {
-        0.50
-    } else {
-        0.05
+    let mut final_num_score = (total_score / (gt_nums.len() as f64)) as f32;
+
+    // Deduct credit if candidate contains conflicting extra numbers
+    if conflicting_extra > 0 && cand_nums.len() > gt_nums.len() {
+        final_num_score *= 0.75;
     }
+
+    final_num_score
 }
 
 pub fn extract_words(text: &str) -> Vec<String> {
@@ -172,20 +182,33 @@ pub fn extract_words(text: &str) -> Vec<String> {
     words
 }
 
-pub fn contains_whole_word(haystack: &str, needle: &str) -> bool {
-    let all_n_words = extract_words(needle);
-    let key_n_words: Vec<&String> = all_n_words.iter().filter(|w| !is_stopword(w.as_str())).collect();
-    let effective_n = if key_n_words.is_empty() { all_n_words.iter().collect() } else { key_n_words };
-
-    if effective_n.is_empty() { return false; }
-
-    let h_words = extract_words(haystack);
-    for nw in &effective_n {
-        if !h_words.contains(nw) {
-            return false;
-        }
+// Canonical asset class alias grouping (prevents btc vs bitcoin collisions)
+pub fn get_canonical_asset_class(word: &str) -> Option<&'static str> {
+    match word {
+        "btc" | "bitcoin" | "xbt" => Some("btc"),
+        "eth" | "ethereum" | "ether" => Some("eth"),
+        "sol" | "solana" => Some("sol"),
+        "ada" | "cardano" => Some("ada"),
+        "arb" | "arbitrum" => Some("arb"),
+        "op" | "optimism" => Some("op"),
+        "aave" => Some("aave"),
+        "uni" | "uniswap" => Some("uni"),
+        "link" | "chainlink" => Some("link"),
+        "matic" | "polygon" | "pol" => Some("matic"),
+        "mkr" | "maker" | "makerdao" => Some("mkr"),
+        "usdt" | "tether" => Some("usdt"),
+        "usdc" => Some("usdc"),
+        "steth" | "lido" => Some("steth"),
+        "avax" | "avalanche" => Some("avax"),
+        "bnb" | "binance" => Some("bnb"),
+        "xrp" | "ripple" => Some("xrp"),
+        "doge" | "dogecoin" => Some("doge"),
+        "etc" => Some("etc"),
+        "ltc" => Some("ltc"),
+        "shib" => Some("shib"),
+        "comp" => Some("comp"),
+        _ => None,
     }
-    true
 }
 
 pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str) -> f32 {
@@ -193,30 +216,65 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str) ->
     let gt_words = extract_words(gt_text);
     let cand_words = extract_words(cand_text);
 
-    let entities = [
-        "btc", "bitcoin", "eth", "ethereum", "sol", "solana", "aave", "ada", "cardano",
-        "arb", "arbitrum", "op", "optimism", "uni", "uniswap", "link", "chainlink",
-        "matic", "polygon", "mkr", "maker", "usdt", "tether", "usdc", "steth", "lido",
-        "avax", "avalanche", "bnb", "binance", "xrp", "ripple", "doge", "dogecoin", "etc", "ltc"
-    ];
+    let mut target_class = None;
 
-    let mut target_entity = None;
-    for &e in &entities {
-        if gt_words.iter().any(|w| w == e) || q_words.iter().any(|w| w == e) {
-            target_entity = Some(e);
+    for w in &gt_words {
+        if let Some(cls) = get_canonical_asset_class(w.as_str()) {
+            target_class = Some(cls);
             break;
         }
     }
 
-    if let Some(target) = target_entity {
-        if cand_words.iter().any(|w| w == target) {
+    if target_class.is_none() {
+        for w in &q_words {
+            if let Some(cls) = get_canonical_asset_class(w.as_str()) {
+                target_class = Some(cls);
+                break;
+            }
+        }
+    }
+
+    if let Some(target) = target_class {
+        let mut cand_has_target = false;
+        let mut cand_has_competing = false;
+
+        for cw in &cand_words {
+            if let Some(cand_cls) = get_canonical_asset_class(cw.as_str()) {
+                if cand_cls == target {
+                    cand_has_target = true;
+                } else {
+                    cand_has_competing = true;
+                }
+            }
+        }
+
+        if cand_has_target {
             1.00
+        } else if cand_has_competing {
+            0.05 // Severe penalty for substituting a competing asset
         } else {
-            0.02
+            0.90 // Concise answers (e.g. "$65,400 USD") are not penalized
         }
     } else {
         1.00
     }
+}
+
+pub fn check_currency_consistency(q_text: &str, gt_text: &str, cand_text: &str) -> f32 {
+    let combined_ref = String::from(q_text) + " " + gt_text;
+    let ref_lower: String = combined_ref.chars().map(to_lower).collect();
+    let cand_lower: String = cand_text.chars().map(to_lower).collect();
+
+    let has_ref_eur = ref_lower.contains("eur") || ref_lower.contains('€');
+    let has_ref_usd = ref_lower.contains("usd") || ref_lower.contains('$') || ref_lower.contains("usdt") || ref_lower.contains("usdc");
+
+    let has_cand_eur = cand_lower.contains("eur") || cand_lower.contains('€');
+    let has_cand_usd = cand_lower.contains("usd") || cand_lower.contains('$') || cand_lower.contains("usdt") || cand_lower.contains("usdc");
+
+    if (has_ref_usd && !has_ref_eur && has_cand_eur) || (has_ref_eur && !has_ref_usd && has_cand_usd && !has_cand_eur) {
+        return 0.10;
+    }
+    1.0
 }
 
 pub fn check_polarity_and_negation(gt_text: &str, cand_text: &str) -> f32 {
@@ -227,8 +285,8 @@ pub fn check_polarity_and_negation(gt_text: &str, cand_text: &str) -> f32 {
     let gt_has_neg = negations.iter().any(|&nw| gt_lower.contains(nw));
     let cand_has_neg = negations.iter().any(|&nw| cand_lower.contains(nw));
 
-    if !gt_has_neg && cand_has_neg {
-        return 0.02;
+    if !gt_has_neg && cand_has_neg && (cand_lower.contains("trading") || cand_lower.contains("price") || cand_lower.contains("sanctioned") || cand_lower.contains("exploited")) {
+        return 0.05;
     }
 
     let pairs = [
@@ -246,7 +304,7 @@ pub fn check_polarity_and_negation(gt_text: &str, cand_text: &str) -> f32 {
         if (gt_has_pos && !gt_has_neg_pair && cand_has_neg_pair && !cand_has_pos)
             || (gt_has_neg_pair && !gt_has_pos && cand_has_pos && !cand_has_neg_pair)
         {
-            return 0.02;
+            return 0.05;
         }
     }
     1.0
