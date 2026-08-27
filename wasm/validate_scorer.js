@@ -9,7 +9,7 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
   const { alloc, rank_answer, rank_answer_cached, breakdown_answer, embed, memory } = ex;
 
   console.log('\n================================================================');
-  console.log('    TELEGRAPH CANONICAL SEMANTIC WASM SCORER AUDIT & HOLDOUT    ');
+  console.log('    TELEGRAPH WASM 104-CASE FINANCIAL BENCHMARK & AUDIT        ');
   console.log('================================================================');
 
   function write(str) {

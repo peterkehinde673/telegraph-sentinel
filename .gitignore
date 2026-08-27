@@ -1,4 +1,4 @@
-# Environment secrets (NEVER commit private keys or API tokens)
+# Environment secrets
 .env
 .env.local
 .env.*.local
@@ -16,6 +16,10 @@ frontend/node_modules/
 venv/
 __pycache__/
 *.pyc
+
+# Rust build artifacts
+wasm/scorer_rust/target/
+target/
 
 # Build outputs & caches
 backend/node/dist/

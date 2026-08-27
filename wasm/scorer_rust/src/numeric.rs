@@ -172,28 +172,20 @@ pub fn extract_words(text: &str) -> Vec<String> {
     words
 }
 
-pub fn get_canonical_asset_class(word: &str) -> Option<&'static str> {
-    match word {
-        "btc" | "bitcoin" | "xbt" => Some("btc"),
-        "eth" | "ethereum" | "ether" => Some("eth"),
-        "sol" | "solana" => Some("sol"),
-        "ada" | "cardano" => Some("ada"),
-        "arb" | "arbitrum" => Some("arb"),
-        "op" | "optimism" => Some("op"),
-        "aave" => Some("aave"),
-        "uni" | "uniswap" => Some("uni"),
-        "link" | "chainlink" => Some("link"),
-        "matic" | "polygon" | "pol" => Some("matic"),
-        "mkr" | "maker" | "makerdao" => Some("mkr"),
-        "usdt" | "tether" => Some("usdt"),
-        "usdc" => Some("usdc"),
-        "steth" | "lido" => Some("steth"),
-        "avax" | "avalanche" => Some("avax"),
-        "bnb" | "binance" => Some("bnb"),
-        "xrp" | "ripple" => Some("xrp"),
-        "doge" | "dogecoin" => Some("doge"),
-        _ => None,
+pub fn contains_whole_word(haystack: &str, needle: &str) -> bool {
+    let all_n_words = extract_words(needle);
+    let key_n_words: Vec<&String> = all_n_words.iter().filter(|w| !is_stopword(w.as_str())).collect();
+    let effective_n = if key_n_words.is_empty() { all_n_words.iter().collect() } else { key_n_words };
+
+    if effective_n.is_empty() { return false; }
+
+    let h_words = extract_words(haystack);
+    for nw in &effective_n {
+        if !h_words.contains(nw) {
+            return false;
+        }
     }
+    true
 }
 
 pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str) -> f32 {
@@ -201,41 +193,26 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str) ->
     let gt_words = extract_words(gt_text);
     let cand_words = extract_words(cand_text);
 
-    let mut target_class = None;
+    let entities = [
+        "btc", "bitcoin", "eth", "ethereum", "sol", "solana", "aave", "ada", "cardano",
+        "arb", "arbitrum", "op", "optimism", "uni", "uniswap", "link", "chainlink",
+        "matic", "polygon", "mkr", "maker", "usdt", "tether", "usdc", "steth", "lido",
+        "avax", "avalanche", "bnb", "binance", "xrp", "ripple", "doge", "dogecoin", "etc", "ltc"
+    ];
 
-    for w in &gt_words {
-        if let Some(cls) = get_canonical_asset_class(w.as_str()) {
-            target_class = Some(cls);
+    let mut target_entity = None;
+    for &e in &entities {
+        if gt_words.iter().any(|w| w == e) || q_words.iter().any(|w| w == e) {
+            target_entity = Some(e);
             break;
         }
     }
 
-    if target_class.is_none() {
-        for w in &q_words {
-            if let Some(cls) = get_canonical_asset_class(w.as_str()) {
-                target_class = Some(cls);
-                break;
-            }
-        }
-    }
-
-    if let Some(target) = target_class {
-        // If question asks about a target entity, candidate MUST contain that target entity
-        let mut cand_has_target = false;
-
-        for cw in &cand_words {
-            if let Some(cand_cls) = get_canonical_asset_class(cw.as_str()) {
-                if cand_cls == target {
-                    cand_has_target = true;
-                    break;
-                }
-            }
-        }
-
-        if cand_has_target {
+    if let Some(target) = target_entity {
+        if cand_words.iter().any(|w| w == target) {
             1.00
         } else {
-            0.02 // Wrong asset penalty (e.g. LTC vs BTC, or ETC vs ETH)
+            0.02
         }
     } else {
         1.00

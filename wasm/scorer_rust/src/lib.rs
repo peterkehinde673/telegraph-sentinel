@@ -118,7 +118,8 @@ unsafe fn signals_from_vecs(
     let gt_l = to_lower_str(ground_truth);
     let ma_l = to_lower_str(miner_answer);
     let is_exact = gt_l.trim() == ma_l.trim();
-    let contains_gt = ma_l.contains(&gt_l) && !gt_l.is_empty();
+
+    let contains_gt_word = numeric::contains_whole_word(miner_answer, ground_truth);
 
     let is_boolean_match = if gt_l == "no" || gt_l == "false" {
         (ma_l.starts_with("no") || ma_l.contains("no ") || ma_l.contains("not ") || ma_l.contains("never")) && !ma_l.starts_with("yes")
@@ -130,7 +131,7 @@ unsafe fn signals_from_vecs(
 
     let base_correctness = if is_exact {
         1.0
-    } else if is_boolean_match || contains_gt || (gt_has_nums && num_mult >= 0.90) {
+    } else if is_boolean_match || contains_gt_word || (gt_has_nums && num_mult >= 0.90) {
         cosine_sim.max(0.92)
     } else {
         cosine_sim * 0.05
