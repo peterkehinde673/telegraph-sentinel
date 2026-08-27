@@ -192,6 +192,9 @@ pub fn get_canonical_asset_class(word: &str) -> Option<&'static str> {
         "bnb" | "binance" => Some("bnb"),
         "xrp" | "ripple" => Some("xrp"),
         "doge" | "dogecoin" => Some("doge"),
+        "etc" => Some("etc"),
+        "ltc" => Some("ltc"),
+        "shib" => Some("shib"),
         _ => None,
     }
 }
@@ -220,22 +223,25 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str) ->
     }
 
     if let Some(target) = target_class {
-        // If question asks about a target entity, candidate MUST contain that target entity
         let mut cand_has_target = false;
+        let mut cand_has_competing = false;
 
         for cw in &cand_words {
             if let Some(cand_cls) = get_canonical_asset_class(cw.as_str()) {
                 if cand_cls == target {
                     cand_has_target = true;
-                    break;
+                } else {
+                    cand_has_competing = true;
                 }
             }
         }
 
-        if cand_has_target {
+        if cand_has_target && !cand_has_competing {
             1.00
+        } else if cand_has_competing {
+            0.01 // Competing entity substitution penalty (e.g. ETC vs ETH)
         } else {
-            0.02 // Wrong asset penalty (e.g. LTC vs BTC, or ETC vs ETH)
+            0.50
         }
     } else {
         1.00

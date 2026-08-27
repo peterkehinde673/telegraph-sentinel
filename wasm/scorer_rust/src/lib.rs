@@ -58,7 +58,6 @@ fn to_lower_str(s: &str) -> String {
     out
 }
 
-// Strictly monotonic cubic separation curve (d/dx > 0 everywhere -> zero inversions)
 #[inline]
 fn apply_high_separation_curve(raw: f32) -> f32 {
     let x = math::clamp01(raw);
@@ -106,24 +105,35 @@ unsafe fn signals_from_vecs(
     ma_vec: &[f32],
 ) -> (f32, f32, f32, f32) {
     let relevance = math::cosine(q_vec, ma_vec);
-    let semantic_sim = math::cosine(gt_vec, ma_vec);
+    let cosine_sim = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
     let num_mult = numeric::check_numeric_consistency(ground_truth, miner_answer);
     let entity_mult = numeric::check_entity_consistency(question, ground_truth, miner_answer);
     let polarity_mult = numeric::check_polarity_and_negation(ground_truth, miner_answer);
 
+    let gt_nums = numeric::parse_numbers(ground_truth);
+    let gt_has_nums = !gt_nums.is_empty();
+
     let gt_l = to_lower_str(ground_truth);
     let ma_l = to_lower_str(miner_answer);
     let is_exact = gt_l.trim() == ma_l.trim();
     let contains_gt = ma_l.contains(&gt_l) && !gt_l.is_empty();
 
+    let is_boolean_match = if gt_l == "no" || gt_l == "false" {
+        (ma_l.starts_with("no") || ma_l.contains("no ") || ma_l.contains("not ") || ma_l.contains("never")) && !ma_l.starts_with("yes")
+    } else if gt_l == "yes" || gt_l == "true" {
+        (ma_l.starts_with("yes") || ma_l.contains("yes ") || ma_l.contains("confirmed")) && !ma_l.contains("not") && !ma_l.contains("no")
+    } else {
+        false
+    };
+
     let base_correctness = if is_exact {
         1.0
-    } else if contains_gt || num_mult == 1.0 {
-        semantic_sim.max(0.92)
+    } else if is_boolean_match || contains_gt || (gt_has_nums && num_mult >= 0.90) {
+        cosine_sim.max(0.92)
     } else {
-        semantic_sim
+        cosine_sim * 0.05
     };
 
     let factual_multiplier = num_mult * entity_mult * polarity_mult;
@@ -135,10 +145,8 @@ unsafe fn signals_from_vecs(
 
 #[inline]
 fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    let raw = (W_RELEVANCE * relevance)
-            + (W_CORRECTNESS * correctness)
-            + (W_LEXICAL * lexical)
-            + (W_LENGTH * len_quality * correctness);
+    let base_quality = 0.65 + (0.20 * relevance) + (0.15 * lexical);
+    let raw = correctness * base_quality * (0.95 + 0.05 * len_quality);
 
     apply_high_separation_curve(raw)
 }
