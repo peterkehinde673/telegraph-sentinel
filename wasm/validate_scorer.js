@@ -21,10 +21,6 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
     return { ptr, len: buf.length };
   }
 
-  // Multi-tier Pairwise Fixtures:
-  // Tier 1: Exact / Paraphrase
-  // Tier 2: Approximate / Qualitative
-  // Tier 3: Wrong Number / Wrong Entity / Contradiction
   const pairwiseCases = [
     {
       q: "What is the price of Bitcoin in USD?",
@@ -42,7 +38,7 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
       paraphrase: "ETH is currently around $3.48K USD.",
       wrongNum: "Ethereum is trading at $850 USD.",
       wrongEntity: "Solana is trading at $3,480 USD.",
-      contradiction: "Ethereum price is impossible to determine."
+      contradiction: "Ethereum price is not $3,480 USD."
     },
     {
       q: "What is the price of Solana in USD?",
@@ -51,7 +47,7 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
       paraphrase: "SOL spot price is near $145.50.",
       wrongNum: "Solana is trading at $22.00 USD.",
       wrongEntity: "Cardano is trading at $145.50 USD.",
-      contradiction: "Solana is down to zero."
+      contradiction: "Solana is not trading at $145.50 USD."
     }
   ];
 
@@ -67,7 +63,7 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
 
     console.log(`\nCase #${idx + 1} (${c.q}):`);
     console.log(`  Exact Match:          ${sExact.toFixed(4)}`);
-    console.log(`  Paraphrase Match:      ${sPara.toFixed(4)}`);
+    console.log(`  Paraphrase Match:     ${sPara.toFixed(4)}`);
     console.log(`  Wrong Number:         ${sWrongNum.toFixed(4)} (Margin vs Exact: +${(sExact - sWrongNum).toFixed(4)})`);
     console.log(`  Wrong Entity:         ${sWrongEnt.toFixed(4)} (Margin vs Exact: +${(sExact - sWrongEnt).toFixed(4)})`);
     console.log(`  Contradiction:        ${sContra.toFixed(4)} (Margin vs Exact: +${(sExact - sContra).toFixed(4)})`);

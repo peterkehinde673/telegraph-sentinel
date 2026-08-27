@@ -40,7 +40,7 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
     while i < chars.len() {
         let c = chars[i];
         if is_digit(c) || ((c == '$' || c == '€' || c == '£' || c == '¥') && i + 1 < chars.len() && (is_digit(chars[i + 1]) || chars[i + 1] == '.')) {
-            if !is_digit(chars[i]) {
+            if !is_digit(c) {
                 i += 1;
             }
 
@@ -57,7 +57,7 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
                     num_str.push(curr);
                     i += 1;
                 } else if curr == ',' && i + 1 < chars.len() && is_digit(chars[i + 1]) {
-                    i += 1;
+                    i += 1; // Skip thousands separator
                 } else {
                     break;
                 }
@@ -124,29 +124,39 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
 
     let cand_nums = parse_numbers(cand_text);
     if cand_nums.is_empty() {
-        return 0.40;
+        return 0.35;
     }
 
     let mut matched_count = 0;
+    let mut conflicting_count = 0;
+
     for gn in &gt_nums {
+        let mut found = false;
         for cn in &cand_nums {
             let diff = if gn.value > cn.value { gn.value - cn.value } else { cn.value - gn.value };
             let max_v = if gn.value > cn.value { gn.value } else { cn.value };
             let rel_diff = if max_v > 0.0 { diff / max_v } else { diff };
 
-            if rel_diff <= 0.02 { // 2% tolerance
-                matched_count += 1;
+            if rel_diff <= 0.02 {
+                found = true;
                 break;
             }
         }
+        if found {
+            matched_count += 1;
+        } else {
+            conflicting_count += 1;
+        }
     }
 
-    if matched_count == gt_nums.len() {
-        1.0
+    if matched_count == gt_nums.len() && cand_nums.len() <= gt_nums.len() + 1 {
+        1.00 // Factual numeric match
     } else if matched_count > 0 {
         0.50
+    } else if conflicting_count > 0 {
+        0.03 // Factual numerical contradiction penalty
     } else {
-        0.05 // Penalty for wrong numbers
+        0.20
     }
 }
 
@@ -172,7 +182,6 @@ pub fn extract_words(text: &str) -> Vec<String> {
     words
 }
 
-// Canonical asset class alias grouping (prevents btc vs bitcoin collisions)
 pub fn get_canonical_asset_class(word: &str) -> Option<&'static str> {
     match word {
         "btc" | "bitcoin" | "xbt" => Some("btc"),
@@ -250,13 +259,12 @@ pub fn check_polarity_and_negation(gt_text: &str, cand_text: &str) -> f32 {
     let gt_lower: String = gt_text.chars().map(to_lower).collect();
     let cand_lower: String = cand_text.chars().map(to_lower).collect();
 
-    // Check negation words
     let negations = ["not", "never", "does not", "did not", "cannot", "is not", "isn't", "was not", "wasn't", "false", "incorrect"];
     let gt_has_neg = negations.iter().any(|&nw| gt_lower.contains(nw));
     let cand_has_neg = negations.iter().any(|&nw| cand_lower.contains(nw));
 
     if !gt_has_neg && cand_has_neg {
-        return 0.05; // Negation conflict on factual claim
+        return 0.02; // Direct factual negation conflict
     }
 
     let pairs = [
@@ -274,7 +282,7 @@ pub fn check_polarity_and_negation(gt_text: &str, cand_text: &str) -> f32 {
         if (gt_has_pos && !gt_has_neg_pair && cand_has_neg_pair && !cand_has_pos)
             || (gt_has_neg_pair && !gt_has_pos && cand_has_pos && !cand_has_neg_pair)
         {
-            return 0.05;
+            return 0.02;
         }
     }
     1.0

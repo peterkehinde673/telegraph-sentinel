@@ -58,18 +58,24 @@ fn to_lower_str(s: &str) -> String {
     out
 }
 
-// Smooth strictly monotonic contrast curve (d/dx > 0 everywhere)
+// Strictly monotonic cubic separation curve (d/dx > 0 everywhere -> zero inversions)
 #[inline]
-fn apply_smooth_contrast(raw: f32) -> f32 {
+fn apply_high_separation_curve(raw: f32) -> f32 {
     let x = math::clamp01(raw);
-    let x2 = x * x;
+    if x <= 0.03 {
+        return 0.0;
+    }
+    if x >= 0.99 {
+        return 1.0;
+    }
+    let x3 = x * x * x;
     let inv_x = 1.0 - x;
-    let inv_x2 = inv_x * inv_x;
-    let den = x2 + inv_x2;
+    let inv_x3 = inv_x * inv_x * inv_x;
+    let den = x3 + inv_x3;
     if den <= 0.0 {
         0.0
     } else {
-        math::clamp01(x2 / den)
+        math::clamp01(x3 / den)
     }
 }
 
@@ -115,7 +121,7 @@ unsafe fn signals_from_vecs(
     let base_correctness = if is_exact {
         1.0
     } else if contains_gt || num_mult == 1.0 {
-        semantic_sim.max(0.85)
+        semantic_sim.max(0.92)
     } else {
         semantic_sim
     };
@@ -134,7 +140,7 @@ fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -
             + (W_LEXICAL * lexical)
             + (W_LENGTH * len_quality * correctness);
 
-    apply_smooth_contrast(raw)
+    apply_high_separation_curve(raw)
 }
 
 #[no_mangle]
