@@ -47,18 +47,19 @@ A larger version of the architecture is maintained in [`docs/architecture.md`](d
 ```text
 .
 ├── backend/
-│   ├── node/              # Gateway, miner API, dashboard, WebSocket layer
-│   └── python/            # FastAPI risk-analysis engine
+│   ├── node/                # Gateway, miner API, dashboard, WebSocket layer
+│   └── python/              # FastAPI risk-analysis engine
 ├── docs/
-│   ├── assets/            # Documentation images
-│   ├── architecture.md    # System architecture
-│   ├── demo.md            # Demonstration flow
-│   ├── deployment.md      # Production deployment notes
-│   ├── development.md     # Local development notes
-│   ├── risk-model.md      # Risk-scoring model
-│   ├── sentinel-miner.yaml# Telegraph miner specification
+│   ├── assets/              # Documentation images
+│   ├── architecture.md      # System architecture
+│   ├── demo.md              # Demonstration flow
+│   ├── deployment.md        # Production deployment notes
+│   ├── development.md       # Local development notes
+│   ├── risk-model.md        # Risk-scoring model
+│   ├── sentinel-miner.yaml  # Telegraph miner specification
 │   ├── sentinel_scorer.wasm # WASM scorer artifact
 │   └── telegraph-integration.md
+├── wasm/                    # WASM source/build and validation tooling
 ├── Dockerfile
 └── README.md
 ```
