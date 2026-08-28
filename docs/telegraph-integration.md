@@ -1,15 +1,37 @@
-# Telegraph Integrate — Track 1 Miner Specification
+# Telegraph Integration
 
-## Overview
-Telegraph Sentinel participates in **Track 1: Providing Intelligence (Becoming a Miner)** by exposing an autonomous pre-flight DeFi risk intelligence endpoint on Telegraph Protocol.
+Telegraph Sentinel includes the artifacts and HTTP routes needed to document its Telegraph miner integration.
 
-## 3-Step Integrate Workflow
-1. **YAML Specification**: Defines kind: miner, supported intents (`CRYPTO_RISK_ASSESSMENT`, `DEFI_PREFLIGHT_AUDIT`, `SECURITY_INCIDENT_SCAN`), endpoint schemas, and x402 pricing floor.
-2. **Import & Hash**: Computes deterministic `keccak256` bytes32 hash of the normalized specification.
-3. **On-Chain Registration (Base Sepolia)**: Registers the miner via the Base Sepolia Registry Contract (`eip155:84532`) linking the bytes32 hash and IPFS spec URI.
+## Network
 
-## Live Endpoints
-* `GET /api/v1/miner/spec.yaml` — Machine-readable YAML miner integration schema.
-* `POST /api/v1/miner/risk-assessment` — Intelligence evaluation endpoint for autonomous agents.
-* `POST /api/v1/miner/yaml/validate` — YAML syntax parser and `keccak256` generator.
-* `GET /api/v1/miner/contract-config` — Base Sepolia Registry ABI and contract address.
+The project targets **Base Sepolia** (`eip155:84532`).
+
+## Miner specification
+
+The checked-in machine-readable specification is [`sentinel-miner.yaml`](sentinel-miner.yaml). It identifies the Sentinel miner and its production base URL and exposes the risk-assessment route.
+
+The production specification can also be retrieved from:
+
+`GET https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/spec.yaml`
+
+## Public application routes
+
+The current Node gateway exposes the following integration-related routes:
+
+| Method | Route | Purpose |
+|---|---|---|
+| `ALL` | `/api/v1/miner/risk-assessment` | Miner risk-assessment interface |
+| `GET` | `/api/v1/miner/spec.yaml` | Generate the machine-readable miner specification |
+| `POST` | `/api/v1/miner/yaml/validate` | Validate YAML submitted to the gateway |
+| `GET` | `/api/v1/miner/contract-config` | Return registry configuration |
+| `POST` | `/api/v1/miner/onchain/encode-register` | Validate registration parameters and encode a registration transaction |
+
+## Integration artifacts
+
+- [`sentinel-miner.yaml`](sentinel-miner.yaml) — miner specification
+- [`sentinel_scorer.wasm`](sentinel_scorer.wasm) — WASM scorer artifact
+- [`../README.md`](../README.md) — project overview and live deployment
+
+## Important distinction
+
+Local validation of the WASM scorer is useful for regression testing, determinism, and interface checks, but it does not reproduce Telegraph's hidden evaluation benchmark. Likewise, documentation changes should not be treated as changes to the registered on-chain artifact.
