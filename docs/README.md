@@ -1,58 +1,29 @@
-# Telegraph Sentinel
+# Telegraph Sentinel Documentation
 
-> **Verified machine intelligence before every critical crypto decision.**
+This directory contains the documentation and integration artifacts for the Telegraph Sentinel project.
 
-Telegraph Sentinel is an autonomous pre-flight risk intelligence engine and live Telegraph miner oracle built for the Telegraph Protocol ecosystem on Base Sepolia (`eip155:84532`).
+## Documentation index
 
----
+| Document | Description |
+|---|---|
+| [`architecture.md`](architecture.md) | System architecture and component/data flow |
+| [`demo.md`](demo.md) | Demonstration walkthrough for the dashboard and miner flow |
+| [`deployment.md`](deployment.md) | Production deployment and Render configuration notes |
+| [`development.md`](development.md) | Local development and service startup notes |
+| [`risk-model.md`](risk-model.md) | Risk model, formula, and decision thresholds |
+| [`telegraph-integration.md`](telegraph-integration.md) | Telegraph integration and miner specification notes |
+| [`sentinel-miner.yaml`](sentinel-miner.yaml) | Machine-readable miner specification |
+| [`sentinel_scorer.wasm`](sentinel_scorer.wasm) | WASM scorer artifact |
 
-## Architecture
+## Project links
 
-Telegraph Sentinel consists of:
+- [Project README](../README.md)
+- [Live Dashboard](https://telegraph-sentinel-d68u.onrender.com)
+- [Miner specification](sentinel-miner.yaml)
+- [WASM scorer](sentinel_scorer.wasm)
 
-1. Frontend dashboard (React + TypeScript)
-2. Node.js/TypeScript gateway/API
-3. Python/FastAPI risk-analysis engine
-4. Telegraph miner integration (Miner 207, 301, 202)
-5. WASM semantic scoring module (MiniLM-L6-v2)
-6. SQLite persistence
-7. WebSocket real-time updates
+## Documentation assets
 
-[Detailed Architecture](docs/architecture.md)
+The dashboard screenshot used by the project documentation is stored at [`assets/dashboard.png`](assets/dashboard.png).
 
----
-
-## Live Demo & Production Deployment
-
-* [Live Production Dashboard](https://telegraph-sentinel-d68u.onrender.com)
-* **Local Development**: `http://localhost:4000`
-* **Production Miner Oracle (CQYPTO_PRICE)**: `POST https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/risk-assessment`
-* **Integrate YAML Spec**: [https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel-miner.yaml](https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel-miner.yaml)
-* **WASM Candidate Scorer**: [https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel_scorer.wasm](https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel_scorer.wasm)
-
-![Telegraph Sentinel Dashboard](assets/dashboard.png)
-
----
-
-## Quick Testing Guide
-
-### 1. Query the 24/7 Live Miner Oracle
-```bash
-# Query BTC Spot Price
-curl -s -X POST https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/risk-assessment   -H "Content-Type: application/json"   -d '{"asset": "BTC"}'
-
-# Query ETH Spot Price (GET query format)
-curl -s "https://telegraph-sentinel-d68u.onrender.com/api/v1/miner/risk-assessment?asset=ETH'
-```(
-### 2. Run Local Development Stack
-```bash
-cd backend/node
-npm install
-npm run build
-node dist/server.js
-```
-
-### 3. Validate WASM Candidate Scorer
-```bash
-node wasm/validate_scorer.js
-```
+This file is intentionally a documentation index rather than a second copy of the root README, so the repository has one primary project landing page and one focused documentation entry point.
