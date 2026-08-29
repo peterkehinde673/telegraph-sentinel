@@ -1,7 +1,15 @@
-const fs = require('fs');
-const path = require('path');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const wasmPath = path.resolve(__dirname, 'dist/telegraph_sentinel_scorer.wasm');
+if (!fs.existsSync(wasmPath)) {
+  console.error(`✗ WASM artifact not found at: ${wasmPath}`);
+  process.exit(1);
+}
 const wasmBuffer = fs.readFileSync(wasmPath);
 
 // Verify WebAssembly magic header (\0asm)

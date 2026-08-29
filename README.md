@@ -87,6 +87,13 @@ node wasm/validate_scorer.js
 
 Use the repository's validation tooling to inspect the scorer before any protocol submission. The local benchmark is not a substitute for Telegraph's hidden on-chain evaluation set.
 
+## WASM Submission
+
+The Telegraph Sentinel WebAssembly semantic scorer is located at [`wasm/dist/telegraph_sentinel_scorer.wasm`](wasm/dist/telegraph_sentinel_scorer.wasm) (mirrored in [`docs/sentinel_scorer.wasm`](docs/sentinel_scorer.wasm)).
+
+For complete submission details, build commands, verified exports, SHA-256 checksums, and local separation benchmarks, refer to the full specification:
+👉 **[`docs/WASM_SUBMISSION.md`](docs/WASM_SUBMISSION.md)**
+
 ## Production API example
 
 ```bash
@@ -107,6 +114,7 @@ curl -s -X POST \
 | [`docs/risk-model.md`](docs/risk-model.md) | Deterministic risk model and thresholds |
 | [`docs/telegraph-integration.md`](docs/telegraph-integration.md) | Telegraph integration notes |
 | [`docs/sentinel-miner.yaml`](docs/sentinel-miner.yaml) | Miner registration specification |
+| [`docs/WASM_SUBMISSION.md`](docs/WASM_SUBMISSION.md) | WASM scorer submission, exports, and benchmark holdouts |
 
 ## Project status
 
