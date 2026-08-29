@@ -1,0 +1,8 @@
+{
+  "name": "Telegraph Sentinel",
+  "description": "Autonomous DeFi pre-flight risk intelligence engine and verifiable Telegraph miner on Base Sepolia",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
