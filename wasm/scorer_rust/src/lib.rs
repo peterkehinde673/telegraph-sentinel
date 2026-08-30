@@ -123,9 +123,9 @@ unsafe fn signals_from_vecs(
 
     let len_quality = math::sigmoid((miner_answer.len() as f32 - 20.0) / 15.0);
 
-    // If factual score is near zero (e.g. wrong price/entity), correctness is zero.
+    // If factual score is near zero (e.g. wrong price/entity/currency), correctness is zero.
     // If factual score is high, it is gently modulated by question relevance and semantic fluency.
-    let base_correctness = if factual_score < 0.05 {
+    let base_correctness = if factual_score < 0.02 {
         0.0
     } else {
         let fluency_bonus = 0.90 + (0.07 * relevance) + (0.03 * semantic_sim);

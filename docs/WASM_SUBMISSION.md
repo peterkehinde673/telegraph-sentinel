@@ -8,10 +8,10 @@ Its primary role is to compute a normalized quality score ($[0.0, 1.0]$) compari
 ---
 
 ## 2. Intent Specialization: `CRYPTO_PRICE` (Factual Dominance Architecture)
-Following evaluation feedback from Registration #2041, the scoring pipeline was upgraded with **factual dominance gating**:
+Following evaluation feedback from Registration #2046, the scoring pipeline was upgraded with **factual dominance gating & separation enhancement**:
 
-- **Continuous Relative Error Curve**: Evaluates candidate numeric prices against ground truth via a continuous Gaussian error curve ($\le 0.5\%$ error gives $1.00$; small spreads decay smoothly; $>5\%$ error drops to $0.00$), preventing false prices from being rescued by semantic similarity.
-- **Unit & Suffix Normalization**: Fully parses and normalizes currency values, commas, decimal values, suffixes (`$65.4k` $\rightarrow 65,400$, `1.85m` $\rightarrow 1,850,000$, `55 cents` / `55c` $\rightarrow 0.55$), and handles conflicting candidate numbers.
+- **Continuous Relative Error Curve**: Evaluates candidate numeric prices against ground truth via a continuous Gaussian error curve ($\le 0.8\%$ error gives $1.00$; small spreads decay smoothly; $>3.5\%$ error drops to $0.00$), preventing false prices from being rescued by semantic similarity.
+- **Unit & Suffix Normalization**: Fully parses and normalizes currency values, commas, decimal values, scientific exponents (`2.5e-5`), suffixes (`$65.4k` $\rightarrow 65,400$, `1.85m` $\rightarrow 1,850,000$, `55 cents` / `55c` $\rightarrow 0.55$), and handles conflicting candidate numbers.
 - **Dynamic Entity & Ticker Recognition**: Dynamically extracts cryptocurrency asset names and ticker symbols from queries and ground truths (e.g. BTC, ETH, SOL, SUI, NEAR, INJ, TIA, KAS, etc.), penalizing answers that substitute competing assets while preserving concise answers without explicit names.
 - **Currency & Polarity Consistency**: Rejects cross-currency mismatches (e.g. quoting EUR when USD is expected) and flags negation terms ("not trading at $65,400", "dropped below").
 - **Stale & Historical Price Gating**: Distinguishes current spot inquiries from historical claims ("all-time high in 2021 was...", "peaked at", "opened at").
@@ -77,8 +77,8 @@ cmp wasm/dist/telegraph_sentinel_scorer.wasm docs/sentinel_scorer.wasm
 | :--- | :--- |
 | **Artifact Path** | `wasm/dist/telegraph_sentinel_scorer.wasm` |
 | **Mirror Path** | `docs/sentinel_scorer.wasm` |
-| **Binary Size** | `60,865 bytes` (~`59.4 KB`) |
-| **SHA-256 Checksum** | `0116db4aea537375411af7b07a31249c216424cac35651868627c2546a5deccd` |
+| **Binary Size** | `66,719 bytes` (~`65.2 KB`) |
+| **SHA-256 Checksum** | `f7d7eaa58104ad35944f396942cbb715be85aed2d2a9a470ba0a94b5c24424a6` |
 | **Integrity Match** | Byte-for-byte identical between `wasm/dist/` and `docs/` |
 
 ---

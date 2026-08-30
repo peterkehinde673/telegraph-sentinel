@@ -56,16 +56,25 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
             let start_idx = i;
             let mut num_str = String::new();
             let mut has_dot = false;
+            let mut has_exp = false;
 
             while i < len {
                 let curr = chars[i];
                 if is_digit(curr) {
                     num_str.push(curr);
                     i += 1;
-                } else if curr == '.' && !has_dot && i + 1 < len && is_digit(chars[i + 1]) {
+                } else if curr == '.' && !has_dot && !has_exp && i + 1 < len && is_digit(chars[i + 1]) {
                     has_dot = true;
                     num_str.push(curr);
                     i += 1;
+                } else if (curr == 'e' || curr == 'E') && !has_exp && i + 1 < len && (is_digit(chars[i + 1]) || chars[i + 1] == '+' || chars[i + 1] == '-') {
+                    has_exp = true;
+                    num_str.push(curr);
+                    i += 1;
+                    if i < len && (chars[i] == '+' || chars[i] == '-') {
+                        num_str.push(chars[i]);
+                        i += 1;
+                    }
                 } else if curr == ',' && i + 1 < len && is_digit(chars[i + 1]) {
                     i += 1; // Skip thousands comma
                 } else {
@@ -79,7 +88,7 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
 
             // --- CONTEXT INSPECTION BEFORE NUMBER ---
             let prefix_window: String = if start_idx > 0 {
-                let p_start = start_idx.saturating_sub(20);
+                let p_start = start_idx.saturating_sub(25);
                 lower_chars[p_start..start_idx].iter().collect()
             } else {
                 String::new()
@@ -98,23 +107,21 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
                 continue;
             }
 
-            // 2. Check for Clock Times: "14:00", "05:30" (colon followed by 2 digits)
+            // 2. Check for Clock Times: "14:00", "05:30:00" (colon followed by 2 digits)
             if i < len && chars[i] == ':' && i + 2 < len && is_digit(chars[i + 1]) && is_digit(chars[i + 2]) {
-                // Skip the colon and 2 minute digits
                 i += 3;
                 if i < len && chars[i] == ':' && i + 2 < len && is_digit(chars[i + 1]) && is_digit(chars[i + 2]) {
                     i += 3; // Skip seconds
                 }
                 continue;
             }
-            // Check if this was the minute part of a time like "14:00"
             if start_idx >= 1 && chars[start_idx - 1] == ':' {
                 continue;
             }
 
             // 3. Check for Calendar Year (e.g. 1990..2099)
             let mut is_calendar_year = false;
-            if !has_dot && (num_str.starts_with("20") || num_str.starts_with("19")) && num_str.len() == 4 {
+            if !has_dot && !has_exp && (num_str.starts_with("20") || num_str.starts_with("19")) && num_str.len() == 4 {
                 if prefix_window.ends_with("in ")
                     || prefix_window.ends_with("since ")
                     || prefix_window.ends_with("year ")
@@ -138,7 +145,7 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
                 "oct", "october", "nov", "november", "dec", "december",
             ];
             let mut is_date_day = false;
-            if !has_dot && !has_prefix_curr {
+            if !has_dot && !has_exp && !has_prefix_curr {
                 for m in &month_names {
                     let pattern = String::from(*m) + " ";
                     if prefix_window.ends_with(&pattern) {
@@ -175,7 +182,7 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
                     multiplier = 0.01;
                 }
                 // Timeframe intervals: "24h", "24hr", "24-hour", "7d", "30d", "1y", "1h", "15m"
-                else if (rem.starts_with("h") && !rem.starts_with("hbar"))
+                else if (rem.starts_with('h') && !rem.starts_with("hbar"))
                     || rem.starts_with("hr")
                     || rem.starts_with("hour")
                     || rem.starts_with("hours")
@@ -212,7 +219,6 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
                     is_vol_or_mcap = true;
                 } else if rem.starts_with("million") || (rem.starts_with('m') && (rem.len() == 1 || !is_alpha(rem.chars().nth(1).unwrap_or(' ')))) {
                     multiplier = 1_000_000.0;
-                    // Check if it's volume / mcap
                     if prefix_window.contains("vol") || prefix_window.contains("cap") || rem.contains("vol") || rem.contains("cap") {
                         is_vol_or_mcap = true;
                     }
@@ -249,26 +255,53 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
                 is_vol_or_mcap = true;
             }
 
-            // Compute value
-            let mut val: f64 = 0.0;
+            // Parse numerical value (including scientific exponent if present)
+            let mut base_val: f64 = 0.0;
             let mut decimal = false;
             let mut div: f64 = 1.0;
+            let mut exp_val: i32 = 0;
+            let mut exp_sign: i32 = 1;
+            let mut in_exp = false;
 
             for ch in num_str.chars() {
-                if ch == '.' {
+                if ch == 'e' || ch == 'E' {
+                    in_exp = true;
+                } else if in_exp {
+                    if ch == '-' {
+                        exp_sign = -1;
+                    } else if ch == '+' {
+                        exp_sign = 1;
+                    } else if is_digit(ch) {
+                        let d = (ch as u8 - b'0') as i32;
+                        exp_val = exp_val * 10 + d;
+                    }
+                } else if ch == '.' {
                     decimal = true;
                 } else if is_digit(ch) {
                     let d = (ch as u8 - b'0') as f64;
                     if !decimal {
-                        val = val * 10.0 + d;
+                        base_val = base_val * 10.0 + d;
                     } else {
                         div *= 10.0;
-                        val += d / div;
+                        base_val += d / div;
                     }
                 }
             }
 
-            let final_val = val * multiplier;
+            if in_exp {
+                let total_exp = exp_sign * exp_val;
+                if total_exp > 0 {
+                    for _ in 0..total_exp {
+                        base_val *= 10.0;
+                    }
+                } else if total_exp < 0 {
+                    for _ in 0..(-total_exp) {
+                        base_val /= 10.0;
+                    }
+                }
+            }
+
+            let final_val = base_val * multiplier;
 
             // Unit count like "1 BTC = $65,400"
             if is_unit_count && (final_val == 1.0 || final_val == 100.0) && !has_prefix_curr {
@@ -296,12 +329,13 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
         return 1.0;
     }
 
-    // Filter price numbers vs percentage numbers
-    let gt_has_pct = gt_all.iter().any(|n| n.is_percentage);
-    let gt_nums: Vec<NumberMatch> = if gt_has_pct {
-        gt_all.into_iter().filter(|n| n.is_percentage).collect()
-    } else {
+    // In CRYPTO_PRICE intent, price numbers are the authoritative target.
+    // If ground truth contains any price number, we MUST match prices.
+    let gt_has_price = gt_all.iter().any(|n| n.is_price);
+    let gt_nums: Vec<NumberMatch> = if gt_has_price {
         gt_all.into_iter().filter(|n| n.is_price).collect()
+    } else {
+        gt_all.into_iter().filter(|n| n.is_percentage).collect()
     };
 
     if gt_nums.is_empty() {
@@ -309,10 +343,10 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
     }
 
     let cand_all = parse_numbers(cand_text);
-    let cand_nums: Vec<NumberMatch> = if gt_has_pct {
-        cand_all.into_iter().filter(|n| n.is_percentage).collect()
-    } else {
+    let cand_nums: Vec<NumberMatch> = if gt_has_price {
         cand_all.into_iter().filter(|n| n.is_price).collect()
+    } else {
+        cand_all.into_iter().filter(|n| n.is_percentage).collect()
     };
 
     if cand_nums.is_empty() {
@@ -329,26 +363,26 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
             let max_v = if gn.value > cn.value { gn.value } else { cn.value };
             let rel_diff = if max_v > 0.0 { diff / max_v } else { diff };
 
-            // Continuous high-separation relative error curve:
-            // <= 0.5% error: 1.00
-            // 0.5% - 2% error: 1.00 -> 0.95
-            // 2% - 5% error: 0.95 -> 0.40
-            // > 5% error: steep exponential decay to 0.00
-            let match_score = if rel_diff <= 0.005 {
+            // Calibrated continuous price error curve:
+            // <= 0.8% error: 1.00 (covers exchange spread/rounding: $65,400 vs $65,400.25)
+            // 0.8% - 2.0% error: 1.00 -> 0.82
+            // 2.0% - 3.5% error: 0.82 -> 0.00
+            // > 3.5% error: 0.00 (factual failure on spot crypto price)
+            let match_score = if rel_diff <= 0.008 {
                 1.00
-            } else if rel_diff <= 0.02 {
-                1.00 - 3.33 * (rel_diff - 0.005)
-            } else if rel_diff <= 0.05 {
-                0.95 * exp(-120.0 * (rel_diff - 0.02) * (rel_diff - 0.02))
+            } else if rel_diff <= 0.020 {
+                1.00 - 15.0 * (rel_diff - 0.008)
+            } else if rel_diff <= 0.035 {
+                0.82 * exp(-4000.0 * (rel_diff - 0.020) * (rel_diff - 0.020))
             } else {
-                exp(-150.0 * rel_diff * rel_diff)
+                0.00
             };
 
             if match_score > best_match {
                 best_match = match_score;
             }
 
-            if rel_diff > 0.25 {
+            if rel_diff > 0.15 {
                 major_conflicts += 1;
             }
         }
@@ -357,20 +391,41 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
 
     let mut score = (total_score / (gt_nums.len() as f64)) as f32;
 
-    // Check if candidate contains a contradictory price claim (e.g. "$65,400 according to some, but actually $12,000")
-    if major_conflicts > 0 && cand_nums.len() > gt_nums.len() {
+    // Check if candidate contains multiple contradictory prices or broad fake ranges
+    if cand_nums.len() > gt_nums.len() {
         let cand_lower = to_lower_str(cand_text);
-        if cand_lower.contains("actually")
-            || cand_lower.contains("instead")
-            || cand_lower.contains("but now")
-            || cand_lower.contains("rather than")
-            || cand_lower.contains("or perhaps")
-            || cand_lower.contains("or maybe")
-        {
-            return 0.00;
+
+        // Check if candidate is a price range like "between $A and $B"
+        if cand_nums.len() == 2 && (cand_lower.contains("between") || cand_lower.contains("to") || cand_lower.contains('-')) {
+            let p1 = cand_nums[0].value;
+            let p2 = cand_nums[1].value;
+            let range_min = if p1 < p2 { p1 } else { p2 };
+            let range_max = if p1 > p2 { p1 } else { p2 };
+            let spread = if range_max > 0.0 { (range_max - range_min) / range_max } else { 0.0 };
+
+            // If range spread is wider than 4% (e.g. "$10,000 to $20,000" or "$10,000 to $70,000"), fail it
+            if spread > 0.04 {
+                return 0.00;
+            }
         }
-        // Penalize extra contradictory price numbers
-        score *= 0.5;
+
+        if major_conflicts > 0 {
+            if cand_lower.contains("actually")
+                || cand_lower.contains("instead")
+                || cand_lower.contains("but now")
+                || cand_lower.contains("rather than")
+                || cand_lower.contains("or perhaps")
+                || cand_lower.contains("or maybe")
+                || cand_lower.contains("was")
+                || cand_lower.contains("dropped to")
+                || cand_lower.contains("crashed to")
+                || cand_lower.contains("surged to")
+                || cand_lower.contains("updated to")
+            {
+                return 0.00;
+            }
+            score = 0.00;
+        }
     }
 
     if score < 0.01 {
@@ -426,11 +481,11 @@ pub fn extract_raw_tokens(text: &str) -> Vec<String> {
     tokens
 }
 
-// Canonical asset aliases and generic dynamic ticker recognition
+// Canonical asset aliases
 pub fn get_canonical_asset_class(word: &str) -> Option<&'static str> {
     match word {
-        "btc" | "bitcoin" | "xbt" => Some("btc"),
-        "eth" | "ethereum" | "ether" => Some("eth"),
+        "btc" | "bitcoin" | "xbt" | "sats" | "satoshi" => Some("btc"),
+        "eth" | "ethereum" | "ether" | "weth" => Some("eth"),
         "sol" | "solana" => Some("sol"),
         "ada" | "cardano" => Some("ada"),
         "arb" | "arbitrum" => Some("arb"),
@@ -442,12 +497,12 @@ pub fn get_canonical_asset_class(word: &str) -> Option<&'static str> {
         "mkr" | "maker" | "makerdao" => Some("mkr"),
         "usdt" | "tether" => Some("usdt"),
         "usdc" => Some("usdc"),
-        "steth" | "lido" => Some("steth"),
+        "steth" | "lido" | "ldo" => Some("steth"),
         "avax" | "avalanche" => Some("avax"),
-        "bnb" | "binance" => Some("bnb"),
+        "bnb" | "binancecoin" | "bsc" => Some("bnb"),
         "xrp" | "ripple" => Some("xrp"),
         "doge" | "dogecoin" => Some("doge"),
-        "etc" => Some("etc"),
+        "etc" | "ethereumclassic" => Some("etc"),
         "ltc" | "litecoin" => Some("ltc"),
         "shib" | "shiba" | "shibainu" => Some("shib"),
         "comp" | "compound" => Some("comp"),
@@ -468,8 +523,54 @@ pub fn get_canonical_asset_class(word: &str) -> Option<&'static str> {
         "hbar" | "hedera" => Some("hbar"),
         "sushi" | "sushiswap" => Some("sushi"),
         "band" => Some("band"),
+        "trx" | "tron" => Some("trx"),
+        "ton" | "toncoin" => Some("ton"),
+        "algo" | "algorand" => Some("algo"),
+        "vet" | "vechain" => Some("vet"),
+        "xlm" | "stellar" => Some("xlm"),
+        "bch" | "bitcoincash" => Some("bch"),
+        "ftm" | "fantom" | "sonic" => Some("ftm"),
+        "rune" | "thorchain" => Some("rune"),
+        "sei" => Some("sei"),
+        "strk" | "starknet" => Some("strk"),
+        "wld" | "worldcoin" => Some("wld"),
+        "ena" | "ethena" => Some("ena"),
+        "ondo" => Some("ondo"),
+        "pendle" => Some("pendle"),
+        "bonk" => Some("bonk"),
+        "wif" | "dogwifhat" => Some("wif"),
+        "floki" => Some("floki"),
+        "jup" | "jupiter" => Some("jup"),
+        "pyth" => Some("pyth"),
+        "fet" | "asi" => Some("fet"),
+        "gala" => Some("gala"),
+        "chz" | "chiliz" => Some("chz"),
+        "sand" => Some("sand"),
+        "mana" => Some("mana"),
+        "crv" | "curve" => Some("crv"),
+        "snx" | "synthetix" => Some("snx"),
+        "dydx" => Some("dydx"),
+        "gmx" => Some("gmx"),
+        "ens" => Some("ens"),
+        "1inch" => Some("1inch"),
+        "ar" | "arweave" => Some("ar"),
+        "akt" | "akash" => Some("akt"),
+        "stx" | "stacks" => Some("stx"),
+        "imx" | "immutable" | "immutablex" => Some("imx"),
+        "grt" | "thegraph" => Some("grt"),
         _ => None,
     }
+}
+
+// Check if word is an exchange name (not a competing asset)
+pub fn is_exchange_or_platform(word: &str) -> bool {
+    matches!(
+        word,
+        "binance" | "coinbase" | "kraken" | "okx" | "bybit" | "gate" | "kucoin"
+            | "mexc" | "bitfinex" | "gemini" | "bitget" | "crypto.com" | "robinhood"
+            | "raydium" | "aerodrome" | "uniswap" | "sushiswap" | "pancakeswap"
+            | "coingecko" | "coinmarketcap" | "dexscreener" | "oracle" | "pyth"
+    )
 }
 
 pub fn is_common_query_word(w: &str) -> bool {
@@ -479,6 +580,7 @@ pub fn is_common_query_word(w: &str) -> bool {
             | "value" | "in" | "usd" | "eur" | "gbp" | "how" | "much" | "does" | "cost"
             | "ticker" | "symbol" | "for" | "today" | "now" | "token" | "coin" | "crypto"
             | "cryptocurrency" | "market" | "rate" | "quote" | "worth" | "on" | "as"
+            | "to" | "and" | "a" | "an" | "per" | "with" | "right" | "live" | "feed"
     )
 }
 
@@ -509,6 +611,9 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str) ->
         let mut cand_has_competing = false;
 
         for cw in &cand_words {
+            if is_exchange_or_platform(cw) {
+                continue;
+            }
             if let Some(cand_cls) = get_canonical_asset_class(cw) {
                 if cand_cls == target {
                     cand_has_target = true;
@@ -523,7 +628,7 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str) ->
         } else if cand_has_competing {
             return 0.00; // Zero credit for attributing to wrong asset
         } else {
-            return 0.98; // Concise answers without explicit asset name
+            return 1.00; // Concise answers without explicit asset name (e.g. "$145.50 USD")
         }
     }
 
@@ -532,7 +637,7 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str) ->
     let raw_q_tokens = extract_raw_tokens(q_text);
     for tok in &raw_q_tokens {
         let l = to_lower_str(tok);
-        if !is_common_query_word(&l) && tok.len() >= 2 {
+        if !is_common_query_word(&l) && !is_exchange_or_platform(&l) && tok.len() >= 2 {
             dynamic_target_tokens.push(l);
         }
     }
@@ -546,9 +651,11 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str) ->
             }
         }
 
-        // Check if candidate mentions a known competing asset class when question asked about an unlisted dynamic asset
         let mut cand_competing_known = false;
         for cw in &cand_words {
+            if is_exchange_or_platform(cw) {
+                continue;
+            }
             if let Some(cand_cls) = get_canonical_asset_class(cw) {
                 if cand_cls != "usdt" && cand_cls != "usdc" && !dynamic_target_tokens.iter().any(|t| t == &cand_cls) {
                     cand_competing_known = true;
@@ -562,7 +669,7 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str) ->
         } else if cand_competing_known {
             0.00
         } else {
-            0.98
+            1.00
         }
     } else {
         1.00
@@ -578,21 +685,34 @@ pub fn check_currency_consistency(q_text: &str, gt_text: &str, cand_text: &str) 
     let has_ref_usd = ref_lower.contains("usd") || ref_lower.contains('$') || ref_lower.contains("usdt") || ref_lower.contains("usdc") || ref_lower.contains("dollars") || ref_lower.contains("cents");
     let has_ref_gbp = ref_lower.contains("gbp") || ref_lower.contains('£');
     let has_ref_jpy = ref_lower.contains("jpy") || ref_lower.contains('¥');
+    let has_ref_cad = ref_lower.contains("cad") || ref_lower.contains("c$");
+    let has_ref_aud = ref_lower.contains("aud") || ref_lower.contains("a$");
 
     let has_cand_eur = cand_lower.contains("eur") || cand_lower.contains('€');
     let has_cand_usd = cand_lower.contains("usd") || cand_lower.contains('$') || cand_lower.contains("usdt") || cand_lower.contains("usdc") || cand_lower.contains("dollars") || cand_lower.contains("cents");
     let has_cand_gbp = cand_lower.contains("gbp") || cand_lower.contains('£');
     let has_cand_jpy = cand_lower.contains("jpy") || cand_lower.contains('¥');
+    let has_cand_cad = cand_lower.contains("cad") || cand_lower.contains("c$");
+    let has_cand_aud = cand_lower.contains("aud") || cand_lower.contains("a$");
 
-    if has_ref_usd && !has_ref_eur && has_cand_eur {
-        return 0.00;
+    if has_ref_usd || (!has_ref_eur && !has_ref_gbp && !has_ref_jpy && !has_ref_cad && !has_ref_aud) {
+        if has_cand_eur && !has_cand_usd {
+            return 0.00;
+        }
+        if has_cand_gbp && !has_cand_usd {
+            return 0.00;
+        }
+        if has_cand_jpy && !has_cand_usd {
+            return 0.00;
+        }
+        if has_cand_cad && !has_cand_usd {
+            return 0.00;
+        }
+        if has_cand_aud && !has_cand_usd {
+            return 0.00;
+        }
     }
-    if has_ref_usd && !has_ref_gbp && has_cand_gbp {
-        return 0.00;
-    }
-    if has_ref_usd && !has_ref_jpy && has_cand_jpy {
-        return 0.00;
-    }
+
     if has_ref_eur && !has_ref_usd && has_cand_usd && !has_cand_eur {
         return 0.00;
     }
@@ -610,7 +730,7 @@ pub fn check_polarity_and_negation(gt_text: &str, cand_text: &str) -> f32 {
     let negations = [
         "not", "never", "does not", "did not", "cannot", "is not", "isn't", "was not",
         "wasn't", "false", "incorrect", "no longer", "dropped below", "rejected at",
-        "failed to reach", "won't", "hasn't", "haven't", "untrue",
+        "failed to reach", "won't", "hasn't", "haven't", "untrue", "fake", "manipulated",
     ];
     let gt_has_neg = negations.iter().any(|&nw| gt_lower.contains(nw));
     let cand_has_neg = negations.iter().any(|&nw| cand_lower.contains(nw));
@@ -647,8 +767,12 @@ pub fn check_stale_and_historical(q_text: &str, gt_text: &str, cand_text: &str) 
 
     let historical_markers = [
         "all-time high", "all time high", "ath", "historic high", "historic peak",
-        "peaked at", "opened at", "closed yesterday", "yesterday's close", "last year", "yesterday",
-        "in 2021", "in 2022", "in 2023", "in 2020", "in 2017", "last week", "previous high",
+        "all-time low", "all time low", "atl", "record high", "record low",
+        "peaked at", "opened at", "closed yesterday", "yesterday's close", "yesterday close",
+        "last year", "last month", "last week", "yesterday", "in 2021", "in 2022", "in 2023",
+        "in 2020", "in 2017", "in 2024", "in 2025", "previous high", "former ath",
+        "was trading at", "previously reached", "once reached", "historically reached",
+        "cycle peak", "cycle top", "bull run peak",
     ];
 
     let ref_is_historical = historical_markers.iter().any(|&m| ref_lower.contains(m));
@@ -664,8 +788,10 @@ pub fn check_stale_and_historical(q_text: &str, gt_text: &str, cand_text: &str) 
 pub fn check_hedging_and_uncertainty(cand_text: &str) -> f32 {
     let cand_lower = to_lower_str(cand_text);
     let hedge_markers = [
-        "unconfirmed", "rumored", "might be", "could be around", "possibly around",
-        "disputed", "speculated", "estimated between", "unverified", "allegedly",
+        "unconfirmed", "rumored", "rumour", "might be", "could be around", "possibly around",
+        "maybe around", "disputed", "speculated", "estimated between", "unverified", "allegedly",
+        "unclear whether", "hard to say", "cannot be determined", "uncertain", "don't know",
+        "do not know", "no data", "not sure", "some say", "it is said", "rumor has it",
     ];
 
     if hedge_markers.iter().any(|&hm| cand_lower.contains(hm)) {

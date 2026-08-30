@@ -40,8 +40,7 @@
 
 extern crate alloc;
 
-use crate::tokenizer::{Encoding, MAX_SEQ_LEN};
-use alloc::vec::Vec;
+use crate::tokenizer::Encoding;
 
 pub const EMBED_DIM: usize = 384;
 
@@ -153,6 +152,7 @@ fn lcg_f32(seed: u64) -> f32 {
 //   QLinear(in → out)         = f32 scale + out*in i8 bytes, row-major [out][in]
 //     (dequantized value = i8_byte as f32 * scale)
 
+#[allow(dead_code)]
 const LN_EPS: f32 = 1e-12;
 
 #[cfg(feature = "real_weights")]

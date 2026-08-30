@@ -31,6 +31,7 @@ use alloc::vec::Vec;
 pub const TOKEN_CLS: u32 = 101;
 pub const TOKEN_SEP: u32 = 102;
 pub const TOKEN_PAD: u32 = 0;
+#[allow(dead_code)]
 pub const TOKEN_UNK: u32 = 100;
 
 /// MiniLM-L6-v2 maximum sequence length (model hard limit)
@@ -43,6 +44,7 @@ const VOCAB_SIZE: u32 = 30_522;
 pub struct Encoding {
     pub input_ids: Vec<u32>,
     pub attention_mask: Vec<u32>,
+    #[allow(dead_code)]
     pub token_type_ids: Vec<u32>,
 }
 
