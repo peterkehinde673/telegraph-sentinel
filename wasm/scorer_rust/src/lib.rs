@@ -64,8 +64,8 @@ fn apply_high_separation_curve(raw: f32) -> f32 {
     if x >= 0.985 {
         return 1.0;
     }
-    let x_pow = powf(x, 2.2);
-    let inv_pow = powf(1.0 - x, 2.2);
+    let x_pow = powf(x, 2.5);
+    let inv_pow = powf(1.0 - x, 2.5);
     let den = x_pow + inv_pow;
     if den <= 0.0 {
         0.0
@@ -128,7 +128,7 @@ unsafe fn signals_from_vecs(
     let base_correctness = if factual_score < 0.05 {
         0.0
     } else {
-        let fluency_bonus = 0.85 + (0.10 * relevance) + (0.05 * semantic_sim);
+        let fluency_bonus = 0.90 + (0.07 * relevance) + (0.03 * semantic_sim);
         math::clamp01(factual_score * fluency_bonus)
     };
 
@@ -142,7 +142,7 @@ fn composite(relevance: f32, correctness: f32, _lexical: f32, _len_quality: f32)
     }
 
     // Factual correctness dominates completely.
-    let raw = correctness * (0.90 + 0.10 * relevance);
+    let raw = correctness * (0.92 + 0.08 * relevance);
     apply_high_separation_curve(raw)
 }
 

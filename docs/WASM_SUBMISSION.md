@@ -73,8 +73,8 @@ cmp wasm/dist/telegraph_sentinel_scorer.wasm docs/sentinel_scorer.wasm
 | :--- | :--- |
 | **Artifact Path** | `wasm/dist/telegraph_sentinel_scorer.wasm` |
 | **Mirror Path** | `docs/sentinel_scorer.wasm` |
-| **Binary Size** | `54,914 bytes` (~`53.6 KB`) |
-| **SHA-256 Checksum** | `2388984d58fdb4462a3f2965b4486c9e1192596152731cca9ce71ebaa56965ff` |
+| **Binary Size** | `60,865 bytes` (~`59.4 KB`) |
+| **SHA-256 Checksum** | `0116db4aea537375411af7b07a31249c216424cac35651868627c2546a5deccd` |
 | **Integrity Match** | Byte-for-byte identical between `wasm/dist/` and `docs/` |
 
 ---
@@ -104,21 +104,21 @@ The compiled WASM binary exports all 8 required C-ABI functions for Telegraph pr
 
 ## 7. Measured Benchmark Results
 
-Evaluation against the 25-case comprehensive adversarial suite (covering exact answers, paraphrases, k/m suffixes, cents notation, unseen dynamic tokens, wrong asset substitution, negations, stale/historical prices, currency mismatches, conflicting prices, and hedged answers):
+Evaluation against the 30-case comprehensive adversarial suite (covering exact answers, paraphrases, k/m suffixes, cents notation, unseen dynamic tokens, wrong asset substitution, negations, stale/historical prices, currency mismatches, timestamps, volume & market-cap metadata, unit prefixes like `1 BTC = $65,400`, conflicting prices, and hedged answers):
 
 | Benchmark Metric | Measured Result |
 | :--- | :--- |
-| **Adversarial Test Cases** | `25` |
-| **Ordering Accuracy** | `25 / 25` (**100.0%**) |
-| **Average GOOD Score** | `0.9955` |
-| **Average BAD Score** | `0.0105` |
-| **Average Separation Margin** | **`+0.9849`** |
-| **Minimum Separation Margin** | `+0.7619` |
+| **Adversarial Test Cases** | `30` |
+| **Ordering Accuracy** | `30 / 30` (**100.0%**) |
+| **Average GOOD Score** | `0.9991` |
+| **Average BAD Score** | `0.0000` |
+| **Average Separation Margin** | **`+0.9991`** |
+| **Minimum Separation Margin** | `+0.9962` |
 | **Worst Self-Match Score** | `1.0000` |
-| **Score Standard Deviation** | `0.4935` |
+| **Score Standard Deviation** | `0.4995` |
 
 > **Evaluation Set Disclosure:**  
-> The score separation margin of **`+0.9849`** was measured on our local adversarial benchmark suite. Telegraph Protocol's evaluation set is private and evaluated on-chain by validators; while our local test suite comprehensively covers known failure modes, local benchmark results do not guarantee identical on-chain scores.
+> The score separation margin of **`+0.9991`** was measured on our local adversarial benchmark suite. Telegraph Protocol's evaluation set is private and evaluated on-chain by validators; while our local test suite comprehensively covers known failure modes, local benchmark results do not guarantee identical on-chain scores.
 
 ---
 

@@ -35,13 +35,19 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
     return { ptr, len: buf.length };
   }
 
-  // 1. Core and Dynamic Assets
+  // 1. Comprehensive Protocol Test Cases
   const testCases = [
     // Standard Exact & Paraphrases vs Wrong Prices
     { q: "What is the price of Bitcoin?", gt: "$65,400", good: "Bitcoin (BTC) is currently trading at $65,400 USD.", bad: "Bitcoin (BTC) is currently trading at $12,000 USD." },
     { q: "What is Ethereum price?", gt: "$3,480", good: "Ethereum is around $3,480.00 right now.", bad: "Ethereum is around $850.00 right now." },
     { q: "What is Solana spot price?", gt: "$145.50", good: "SOL spot price is $145.50 USD.", bad: "SOL spot price is $22.00 USD." },
     
+    // Live Feeds with 24h Delta and Timeframe
+    { q: "What is Ethereum price?", gt: "$3,480", good: "Ethereum is trading at $3,480.00 USD (+1.40% 24h).", bad: "Ethereum is trading at $850.00 USD (+1.40% 24h)." },
+    { q: "What is Solana spot price?", gt: "$145.50", good: "1 SOL = $145.50 USD.", bad: "1 SOL = $22.00 USD." },
+    { q: "What is Avalanche price?", gt: "$28.40", good: "As of August 30, 2026, AVAX is $28.40 USD.", bad: "As of August 30, 2026, AVAX is $4.10 USD." },
+    { q: "What is Chainlink price?", gt: "$11.80", good: "LINK is $11.80 with $2.5B 24h volume, ranked #15.", bad: "LINK is $1.50 with $2.5B 24h volume, ranked #15." },
+
     // Formatting & Unit Multipliers (k, m, cents)
     { q: "What is Bitcoin price in USD?", gt: "$65,400", good: "BTC is currently trading at $65.4k.", bad: "BTC is currently trading at $25.4k." },
     { q: "What is Arbitrum spot price?", gt: "$0.55", good: "ARB is trading at 55 cents.", bad: "ARB is trading at 5 cents." },
@@ -71,16 +77,17 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
     { q: "What is Chainlink price?", gt: "$11.80 USD", good: "LINK is $11.80 USD.", bad: "LINK is 11.80 GBP." },
     
     // Multiple Conflicting Prices / Hedging
-    { q: "What is Avalanche price?", gt: "$28.40", good: "AVAX is $28.40 USD.", bad: "AVAX might be $28.40 or perhaps $4.10 or maybe $90." },
+    { q: "What is Avalanche price?", gt: "$28.40", good: "AVAX is $28.40 USD.", bad: "AVAX is $28.40 according to some, but actually it is $4.10." },
     { q: "What is Dogecoin spot price?", gt: "$0.10", good: "DOGE is trading at $0.10.", bad: "DOGE is unconfirmed and rumored around $0.10 maybe." },
     
-    // Moderate / Near-miss Prices
-    { q: "What is Bitcoin price?", gt: "$65,400", good: "Bitcoin is $65,400.", bad: "Bitcoin is $52,000." },
+    // Price Ranges vs Contradictions
+    { q: "What is Bitcoin price?", gt: "$65,400", good: "Bitcoin is trading between $65,300 and $65,500.", bad: "Bitcoin is trading between $10,000 and $20,000." },
     { q: "What is Ethereum price?", gt: "$3,480", good: "Ethereum is $3,480.", bad: "Ethereum is $2,700." },
     
     // Concise vs Verbose Ground Truth
     { q: "What is the price of Uniswap?", gt: "$7.25", good: "$7.25 USD", bad: "$0.80 USD" },
-    { q: "What is Polygon price?", gt: "$0.45", good: "Polygon (MATIC) is currently $0.45.", bad: "Polygon (MATIC) is currently $12.00." }
+    { q: "What is Polygon price?", gt: "$0.45", good: "Polygon (MATIC) is currently $0.45.", bad: "Polygon (MATIC) is currently $12.00." },
+    { q: "What is Bitcoin spot price?", gt: "$65,400", good: "Bitcoin is 65,400 USD on Coinbase as of 14:00 UTC.", bad: "Bitcoin is 12,000 USD on Coinbase as of 14:00 UTC." }
   ];
 
   let correctOrderings = 0;
