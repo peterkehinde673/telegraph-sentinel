@@ -25,11 +25,6 @@ const IDX_LEXICAL:      usize = 2;
 const IDX_LENGTH:       usize = 3;
 const IDX_COMPOSITE:    usize = 4;
 
-const W_RELEVANCE:   f32 = 0.20;
-const W_CORRECTNESS: f32 = 0.60;
-const W_LEXICAL:     f32 = 0.15;
-const W_LENGTH:      f32 = 0.05;
-
 #[inline]
 unsafe fn read_str<'a>(ptr: i32, len: i32) -> &'a str {
     if ptr <= 0 || len <= 0 {
@@ -59,18 +54,18 @@ fn to_lower_str(s: &str) -> String {
     out
 }
 
-// Strictly monotonic power contrast curve (d/dx > 0 everywhere)
+// Strictly monotonic high-separation contrast curve
 #[inline]
 fn apply_high_separation_curve(raw: f32) -> f32 {
     let x = math::clamp01(raw);
-    if x <= 0.03 {
+    if x <= 0.02 {
         return 0.0;
     }
-    if x >= 0.99 {
+    if x >= 0.985 {
         return 1.0;
     }
-    let x_pow = powf(x, 2.5);
-    let inv_pow = powf(1.0 - x, 2.5);
+    let x_pow = powf(x, 2.2);
+    let inv_pow = powf(1.0 - x, 2.2);
     let den = x_pow + inv_pow;
     if den <= 0.0 {
         0.0
@@ -113,28 +108,41 @@ unsafe fn signals_from_vecs(
     let entity_mult = numeric::check_entity_consistency(question, ground_truth, miner_answer);
     let currency_mult = numeric::check_currency_consistency(question, ground_truth, miner_answer);
     let polarity_mult = numeric::check_polarity_and_negation(ground_truth, miner_answer);
+    let stale_mult = numeric::check_stale_and_historical(question, ground_truth, miner_answer);
+    let hedge_mult = numeric::check_hedging_and_uncertainty(miner_answer);
 
     let gt_l = to_lower_str(ground_truth);
     let ma_l = to_lower_str(miner_answer);
     let is_exact = gt_l.trim() == ma_l.trim();
 
-    let factual_multiplier = num_mult * entity_mult * currency_mult * polarity_mult;
-    let base_correctness = if is_exact {
+    let factual_score = if is_exact {
         1.0
     } else {
-        (semantic_sim * 0.65 + lexical * 0.35) * factual_multiplier
+        num_mult * entity_mult * currency_mult * polarity_mult * stale_mult * hedge_mult
     };
 
-    let len_quality = math::sigmoid((miner_answer.len() as f32 - 25.0) / 20.0);
+    let len_quality = math::sigmoid((miner_answer.len() as f32 - 20.0) / 15.0);
+
+    // If factual score is near zero (e.g. wrong price/entity), correctness is zero.
+    // If factual score is high, it is gently modulated by question relevance and semantic fluency.
+    let base_correctness = if factual_score < 0.05 {
+        0.0
+    } else {
+        let fluency_bonus = 0.85 + (0.10 * relevance) + (0.05 * semantic_sim);
+        math::clamp01(factual_score * fluency_bonus)
+    };
 
     (relevance, base_correctness, lexical, len_quality)
 }
 
 #[inline]
-fn composite(relevance: f32, correctness: f32, lexical: f32, len_quality: f32) -> f32 {
-    let base_quality = 0.60 + (0.25 * relevance) + (0.15 * lexical);
-    let raw = correctness * base_quality * (0.95 + 0.05 * len_quality);
+fn composite(relevance: f32, correctness: f32, _lexical: f32, _len_quality: f32) -> f32 {
+    if correctness <= 0.01 {
+        return 0.0;
+    }
 
+    // Factual correctness dominates completely.
+    let raw = correctness * (0.90 + 0.10 * relevance);
     apply_high_separation_curve(raw)
 }
 

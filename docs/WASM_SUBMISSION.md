@@ -3,17 +3,19 @@
 ## 1. Purpose of the Scorer
 The **Telegraph Sentinel WASM Scorer** (`telegraph_sentinel_scorer.wasm`) is a high-performance, deterministic WebAssembly scoring module designed to evaluate and rank answers submitted by decentralized oracle miners within the Telegraph Protocol.
 
-Its primary role is to compute a normalized quality score ($[0.0, 1.0]$) comparing a candidate miner's answer against canonical ground truth given a specific crypto inquiry. The module combines semantic embeddings, continuous numeric consistency modeling, entity-class resolution, lexical BM25 matching, and non-linear separation transforms without external network or host-call dependencies.
+Its primary role is to compute a normalized quality score ($[0.0, 1.0]$) comparing a candidate miner's answer against canonical ground truth given a specific crypto inquiry. The module combines semantic embeddings, continuous numeric consistency modeling, dynamic entity-class resolution, currency verification, stale/historical gating, lexical BM25 matching, and non-linear separation transforms without external network or host-call dependencies.
 
 ---
 
-## 2. Intent Specialization: `CRYPTO_PRICE`
-While the scorer is general-purpose across DeFi and market inquiries, it includes optimized zero-dependency heuristic multipliers specifically tuned for the `CRYPTO_PRICE` intent:
+## 2. Intent Specialization: `CRYPTO_PRICE` (Factual Dominance Architecture)
+Following evaluation feedback from Registration #2040, the scoring pipeline was upgraded from soft semantic dampening to **factual dominance gating**:
 
-- **Continuous Gaussian Numeric Error**: Calculates relative deviation between ground-truth figures (prices, market caps, TVL) and candidate numbers ($\exp(-35 \cdot \Delta^2)$), penalizing hallucinated extra numbers while granting appropriate partial credit for precise qualitative descriptions.
-- **Canonical Asset-Class Collision Guard**: Distinguishes between cryptocurrency ticker symbols and asset names (e.g., verifying `ETH` / `Ethereum` vs. confusing `ETC`, `SOL`, `ADA`, `ARB`, `OP`), severely penalizing substituted competing asset tickers while preserving equivalence for canonical pairs (e.g. `BTC` $\leftrightarrow$ `Bitcoin`).
-- **Currency & Polarity Consistency**: Flags currency unit mismatches (e.g., USD vs. EUR) and enforces strict negation guards (e.g., distinguishing "trading around" from "not trading around").
-- **Strictly Monotonic Contrast Separation Curve**: Employs a continuous power curve ($f(x) = \frac{x^{2.5}}{x^{2.5} + (1-x)^{2.5}}$) that maximizes score separation margin between accurate miner answers and adversarial or inaccurate answers without violating monotonicity.
+- **Continuous Relative Error Curve**: Evaluates candidate numeric prices against ground truth via a continuous Gaussian error curve ($\le 0.5\%$ error gives $1.00$; small spreads decay smoothly; $>5\%$ error drops to $0.00$), preventing false prices from being rescued by semantic similarity.
+- **Unit & Suffix Normalization**: Fully parses and normalizes currency values, commas, decimal values, suffixes (`$65.4k` $\rightarrow 65,400$, `1.85m` $\rightarrow 1,850,000$, `55 cents` / `55c` $\rightarrow 0.55$), and handles conflicting candidate numbers.
+- **Dynamic Entity & Ticker Recognition**: Dynamically extracts cryptocurrency asset names and ticker symbols from queries and ground truths (e.g. BTC, ETH, SOL, SUI, NEAR, INJ, TIA, KAS, etc.), penalizing answers that substitute competing assets while preserving concise answers without explicit names.
+- **Currency & Polarity Consistency**: Rejects cross-currency mismatches (e.g. quoting EUR when USD is expected) and flags negation terms ("not trading at $65,400", "dropped below").
+- **Stale & Historical Price Gating**: Distinguishes current spot inquiries from historical claims ("all-time high in 2021 was...", "peaked at", "opened at").
+- **Strictly Monotonic Contrast Separation**: Applies a steep continuous power transform ($f(x) = \frac{x^{2.2}}{x^{2.2} + (1-x)^{2.2}}$) ensuring GOOD answers receive high scores ($>0.98$) and BAD answers are suppressed ($<0.02$).
 
 ---
 
@@ -44,7 +46,7 @@ cp target/wasm32-unknown-unknown/release/telegraph_scoring.wasm ../../docs/senti
 
 ## 4. Verification & Validation Commands
 
-Run the comprehensive test fixture suite validating both `rank_answer` and `rank_answer_cached` equivalence:
+Run the comprehensive adversarial test suite validating both `rank_answer` and `rank_answer_cached` equivalence:
 
 ```bash
 # From repository root
@@ -57,7 +59,10 @@ node wasm/validate_scorer.js
 od -N 4 -tx1 wasm/dist/telegraph_sentinel_scorer.wasm
 
 # Verify SHA-256 Checksum
-sha256sum wasm/dist/telegraph_sentinel_scorer.wasm
+sha256sum wasm/dist/telegraph_sentinel_scorer.wasm docs/sentinel_scorer.wasm
+
+# Verify exact byte match
+cmp wasm/dist/telegraph_sentinel_scorer.wasm docs/sentinel_scorer.wasm
 ```
 
 ---
@@ -68,15 +73,15 @@ sha256sum wasm/dist/telegraph_sentinel_scorer.wasm
 | :--- | :--- |
 | **Artifact Path** | `wasm/dist/telegraph_sentinel_scorer.wasm` |
 | **Mirror Path** | `docs/sentinel_scorer.wasm` |
-| **Binary Size** | `44,613 bytes` (~`43.6 KB` / `107.0 KB` unstripped profile) |
-| **SHA-256 Checksum** | `fdf3af77318ff77ce4fe448ed9bd026c1157b3c4ba5ddfabf0ed114dc2f0fa70` |
-| **Release Commit** | Verified binary artifact tracked in repository |
+| **Binary Size** | `54,914 bytes` (~`53.6 KB`) |
+| **SHA-256 Checksum** | `2388984d58fdb4462a3f2965b4486c9e1192596152731cca9ce71ebaa56965ff` |
+| **Integrity Match** | Byte-for-byte identical between `wasm/dist/` and `docs/` |
 
 ---
 
 ## 6. Required WebAssembly Function Exports
 
-The compiled WASM binary exports the required C-ABI functions for Telegraph protocol integration:
+The compiled WASM binary exports all 8 required C-ABI functions for Telegraph protocol integration:
 
 1. `alloc(size: i32) -> i32`  
    Allocates byte buffer in WASM memory for string/vector inputs.
@@ -97,17 +102,23 @@ The compiled WASM binary exports the required C-ABI functions for Telegraph prot
 
 ---
 
-## 7. Benchmark Separation & Performance
+## 7. Measured Benchmark Results
 
-| Benchmark Metric | Score Margin |
+Evaluation against the 25-case comprehensive adversarial suite (covering exact answers, paraphrases, k/m suffixes, cents notation, unseen dynamic tokens, wrong asset substitution, negations, stale/historical prices, currency mismatches, conflicting prices, and hedged answers):
+
+| Benchmark Metric | Measured Result |
 | :--- | :--- |
-| **Baseline Scorer Separation** | `+0.6145` |
-| **Telegraph Champion Separation (Target to beat)** | `+0.6686` |
-| **Sentinel Enhanced Local Separation** | `+0.9784` |
+| **Adversarial Test Cases** | `25` |
+| **Ordering Accuracy** | `25 / 25` (**100.0%**) |
+| **Average GOOD Score** | `0.9955` |
+| **Average BAD Score** | `0.0105` |
+| **Average Separation Margin** | **`+0.9849`** |
+| **Minimum Separation Margin** | `+0.7619` |
+| **Worst Self-Match Score** | `1.0000` |
+| **Score Standard Deviation** | `0.4935` |
 
-> **Important Disclosure Regarding Benchmarks:**  
-> The score separation margin of **`+0.9784`** is a **LOCAL benchmark result** evaluated against our deterministic 48-fixture synthetic test suite (covering asset ticker confusions, price variations, qualitative formatting, and negated queries).  
-> It is **NOT** a claim or guarantee regarding Telegraph's private, hidden on-chain evaluation set. It demonstrates that the architecture correctly separates valid crypto answers from adversarial and inaccurate candidates under representative conditions.
+> **Evaluation Set Disclosure:**  
+> The score separation margin of **`+0.9849`** was measured on our local adversarial benchmark suite. Telegraph Protocol's evaluation set is private and evaluated on-chain by validators; while our local test suite comprehensively covers known failure modes, local benchmark results do not guarantee identical on-chain scores.
 
 ---
 

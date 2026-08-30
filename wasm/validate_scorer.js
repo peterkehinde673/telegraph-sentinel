@@ -20,10 +20,10 @@ if (wasmBuffer[0] !== 0x00 || wasmBuffer[1] !== 0x61 || wasmBuffer[2] !== 0x73 |
 
 WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
   const ex = instance.exports;
-  const { alloc, rank_answer, rank_answer_cached, breakdown_answer, embed, memory } = ex;
+  const { alloc, dealloc, rank_answer, rank_answer_cached, breakdown_answer, embed, cosine_sim, bm25_score, memory } = ex;
 
   console.log('\n================================================================');
-  console.log('    TELEGRAPH CANONICAL SEMANTIC WASM SCORER AUDIT & HOLDOUT    ');
+  console.log('  TELEGRAPH PROTOCOL ENHANCED SENTINEL WASM SCORER AUDIT SUITE  ');
   console.log('================================================================');
 
   function write(str) {
@@ -35,33 +35,62 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
     return { ptr, len: buf.length };
   }
 
-  const assets = [
-    { name: "Bitcoin", sym: "BTC", price: "$65,400", badPrice: "$12,000", wrongSym: "LTC" },
-    { name: "Ethereum", sym: "ETH", price: "$3,480", badPrice: "$850", wrongSym: "ETC" },
-    { name: "Solana", sym: "SOL", price: "$145.50", badPrice: "$22.00", wrongSym: "ADA" },
-    { name: "Avalanche", sym: "AVAX", price: "$28.40", badPrice: "$4.10", wrongSym: "DOT" },
-    { name: "Chainlink", sym: "LINK", price: "$11.80", badPrice: "$1.50", wrongSym: "BAND" },
-    { name: "Uniswap", sym: "UNI", price: "$7.25", badPrice: "$0.80", wrongSym: "SUSHI" },
-    { name: "Maker", sym: "MKR", price: "$2,100", badPrice: "$350", wrongSym: "COMP" },
-    { name: "Arbitrum", sym: "ARB", price: "$0.55", badPrice: "$8.50", wrongSym: "OP" },
-    { name: "Cardano", sym: "ADA", price: "$0.38", badPrice: "$4.20", wrongSym: "SOL" },
-    { name: "Optimism", sym: "OP", price: "$1.42", badPrice: "$18.50", wrongSym: "ARB" },
-    { name: "Polygon", sym: "MATIC", price: "$0.45", badPrice: "$12.00", wrongSym: "ETH" },
-    { name: "Dogecoin", sym: "DOGE", price: "$0.10", badPrice: "$2.50", wrongSym: "SHIB" }
+  // 1. Core and Dynamic Assets
+  const testCases = [
+    // Standard Exact & Paraphrases vs Wrong Prices
+    { q: "What is the price of Bitcoin?", gt: "$65,400", good: "Bitcoin (BTC) is currently trading at $65,400 USD.", bad: "Bitcoin (BTC) is currently trading at $12,000 USD." },
+    { q: "What is Ethereum price?", gt: "$3,480", good: "Ethereum is around $3,480.00 right now.", bad: "Ethereum is around $850.00 right now." },
+    { q: "What is Solana spot price?", gt: "$145.50", good: "SOL spot price is $145.50 USD.", bad: "SOL spot price is $22.00 USD." },
+    
+    // Formatting & Unit Multipliers (k, m, cents)
+    { q: "What is Bitcoin price in USD?", gt: "$65,400", good: "BTC is currently trading at $65.4k.", bad: "BTC is currently trading at $25.4k." },
+    { q: "What is Arbitrum spot price?", gt: "$0.55", good: "ARB is trading at 55 cents.", bad: "ARB is trading at 5 cents." },
+    { q: "What is MakerDAO token value?", gt: "$2,100", good: "MKR is at $2.1k USD.", bad: "MKR is at $0.35k USD." },
+    
+    // Unseen Dynamic Assets (Generalization beyond hardcoded list)
+    { q: "What is the current price of Celestia?", gt: "$5.20", good: "Celestia (TIA) is currently $5.20 USD.", bad: "Celestia (TIA) is currently $0.45 USD." },
+    { q: "What is Injective spot price?", gt: "$24.50", good: "Injective is trading at $24.50.", bad: "Injective is trading at $1.50." },
+    { q: "What is the price of Kaspa?", gt: "$0.16", good: "Kaspa (KAS) is worth $0.16.", bad: "Kaspa (KAS) is worth $2.50." },
+    { q: "How much is Sui token today?", gt: "$1.85", good: "SUI is currently $1.85 USD.", bad: "SUI is currently $9.80 USD." },
+    
+    // Wrong Asset Substitution
+    { q: "What is the price of Solana?", gt: "$145.50", good: "Solana is $145.50.", bad: "Cardano is $145.50." },
+    { q: "What is Bitcoin spot price?", gt: "$65,400", good: "Bitcoin spot is $65,400 USD.", bad: "Ethereum spot is $65,400 USD." },
+    { q: "What is Injective price?", gt: "$24.50", good: "Injective is $24.50.", bad: "Bitcoin is $24.50." },
+    
+    // Negation and Contradictions
+    { q: "What is the price of Bitcoin?", gt: "$65,400", good: "Bitcoin is currently trading at $65,400.", bad: "Bitcoin is not trading at $65,400." },
+    { q: "What is Ethereum spot price?", gt: "$3,480", good: "ETH is at $3,480 USD.", bad: "ETH dropped below $3,480 and is not $3,480." },
+    
+    // Stale & Historical Prices
+    { q: "What is the price of Bitcoin?", gt: "$65,400", good: "Bitcoin spot price is $65,400.", bad: "Bitcoin all-time high was $65,400 in 2021." },
+    { q: "What is Ethereum price?", gt: "$3,480", good: "Ethereum is trading at $3,480 right now.", bad: "Ethereum peaked at $3,480 last year." },
+    
+    // Currency Mismatches
+    { q: "What is Solana price in USD?", gt: "$145.50", good: "Solana is $145.50 USD.", bad: "Solana is 145.50 EUR." },
+    { q: "What is Chainlink price?", gt: "$11.80 USD", good: "LINK is $11.80 USD.", bad: "LINK is 11.80 GBP." },
+    
+    // Multiple Conflicting Prices / Hedging
+    { q: "What is Avalanche price?", gt: "$28.40", good: "AVAX is $28.40 USD.", bad: "AVAX might be $28.40 or perhaps $4.10 or maybe $90." },
+    { q: "What is Dogecoin spot price?", gt: "$0.10", good: "DOGE is trading at $0.10.", bad: "DOGE is unconfirmed and rumored around $0.10 maybe." },
+    
+    // Moderate / Near-miss Prices
+    { q: "What is Bitcoin price?", gt: "$65,400", good: "Bitcoin is $65,400.", bad: "Bitcoin is $52,000." },
+    { q: "What is Ethereum price?", gt: "$3,480", good: "Ethereum is $3,480.", bad: "Ethereum is $2,700." },
+    
+    // Concise vs Verbose Ground Truth
+    { q: "What is the price of Uniswap?", gt: "$7.25", good: "$7.25 USD", bad: "$0.80 USD" },
+    { q: "What is Polygon price?", gt: "$0.45", good: "Polygon (MATIC) is currently $0.45.", bad: "Polygon (MATIC) is currently $12.00." }
   ];
-
-  const testCases = [];
-  assets.forEach(a => {
-    testCases.push({ q: `What is the price of ${a.name}?`, gt: a.price, good: `${a.name} (${a.sym}) is trading at ${a.price}.`, bad: `${a.name} (${a.sym}) is trading at ${a.badPrice}.` });
-    testCases.push({ q: `What is ${a.sym} spot price?`, gt: a.price, good: `${a.sym} spot is currently ${a.price} USD.`, bad: `${a.wrongSym} spot is currently ${a.price} USD.` });
-    testCases.push({ q: `What is ${a.name} price in USD?`, gt: a.price, good: `${a.name} is trading around ${a.price} USD.`, bad: `${a.name} is not trading around ${a.price} USD.` });
-    testCases.push({ q: `What is the ticker symbol for ${a.name}?`, gt: a.sym, good: `The ticker symbol for ${a.name} is ${a.sym}.`, bad: `The ticker symbol for ${a.name} is ${a.wrongSym}.` });
-  });
 
   let correctOrderings = 0;
   let totalGood = 0;
   let totalBad = 0;
   let totalMargin = 0;
+  let minMargin = 1.0;
+  const goodScores = [];
+  const badScores = [];
+  const allScores = [];
 
   testCases.forEach((t, i) => {
     const qW = write(t.q);
@@ -76,24 +105,44 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
     totalGood += sGood;
     totalBad += sBad;
     totalMargin += margin;
+    goodScores.push(sGood);
+    badScores.push(sBad);
+    allScores.push(sGood, sBad);
 
+    if (margin < minMargin) minMargin = margin;
     if (sGood > sBad) correctOrderings++;
 
-    if (i < 10) {
-      console.log(`Case #${(i + 1).toString().padStart(2, '0')}: Good: ${sGood.toFixed(4)} | Bad: ${sBad.toFixed(4)} | Margin: +${margin.toFixed(4)} [${sGood > sBad ? 'PASS ✓' : 'FAIL ✗'}]`);
-    }
+    console.log(`Test #${(i + 1).toString().padStart(2, '0')}: Good: ${sGood.toFixed(4)} | Bad: ${sBad.toFixed(4)} | Margin: +${margin.toFixed(4)} [${sGood > sBad ? 'PASS ✓' : 'FAIL ✗'}]`);
   });
 
   const avgGood = totalGood / testCases.length;
   const avgBad = totalBad / testCases.length;
   const avgMargin = totalMargin / testCases.length;
 
-  console.log('================================================================');
-  console.log(`TOTAL FIXTURES:            ${testCases.length}`);
+  // Standard deviation of all evaluated scores
+  const meanAll = allScores.reduce((a, b) => a + b, 0) / allScores.length;
+  const variance = allScores.reduce((a, b) => a + Math.pow(b - meanAll, 2), 0) / allScores.length;
+  const stdDev = Math.sqrt(variance);
+
+  // Self match tests
+  const selfMatchSamples = ["$65,400", "Bitcoin is trading at $65,400 USD", "$3,480.00", "SOL is $145.50"];
+  let worstSelfMatch = 1.0;
+  selfMatchSamples.forEach(sample => {
+    const sW = write(sample);
+    const qW = write("What is the price?");
+    const score = rank_answer(qW.ptr, qW.len, sW.ptr, sW.len, sW.ptr, sW.len);
+    if (score < worstSelfMatch) worstSelfMatch = score;
+  });
+
+  console.log('\n================================================================');
+  console.log(`TOTAL ADVERSARIAL CASES:   ${testCases.length}`);
   console.log(`ORDERING ACCURACY:         ${correctOrderings} / ${testCases.length} (${((correctOrderings / testCases.length) * 100).toFixed(1)}%)`);
   console.log(`AVERAGE GOOD SCORE:        ${avgGood.toFixed(4)}`);
   console.log(`AVERAGE BAD SCORE:         ${avgBad.toFixed(4)}`);
   console.log(`AVERAGE SEPARATION MARGIN: +${avgMargin.toFixed(4)}`);
+  console.log(`MINIMUM SEPARATION MARGIN: +${minMargin.toFixed(4)}`);
+  console.log(`WORST SELF-MATCH SCORE:    ${worstSelfMatch.toFixed(4)}`);
+  console.log(`SCORE STANDARD DEVIATION:  ${stdDev.toFixed(4)}`);
   console.log('================================================================\n');
 
   // Cached Equivalence Check
@@ -115,7 +164,18 @@ WebAssembly.instantiate(wasmBuffer, {}).then(({ instance }) => {
   const diff = Math.abs(baseS - cachedS);
 
   if (diff > 1e-5) throw new Error(`Cached mismatch: rank_answer (${baseS}) != cached (${cachedS})`);
-  console.log(`✓ rank_answer (${baseS.toFixed(4)}) vs rank_answer_cached (${cachedS.toFixed(4)}) strictly equivalent.\n`);
+  console.log(`✓ rank_answer (${baseS.toFixed(4)}) vs rank_answer_cached (${cachedS.toFixed(4)}) strictly equivalent.`);
+
+  // Breakdown verification
+  const bdPtr = breakdown_answer(q0.ptr, q0.len, gt0.ptr, gt0.len, g0.ptr, g0.len);
+  const bdFloats = new Float32Array(memory.buffer, bdPtr, 5);
+  console.log(`✓ breakdown_answer: [rel: ${bdFloats[0].toFixed(3)}, fact: ${bdFloats[1].toFixed(3)}, lex: ${bdFloats[2].toFixed(3)}, len: ${bdFloats[3].toFixed(3)}, comp: ${bdFloats[4].toFixed(3)}]`);
+
+  // Cosine sim and BM25 verification
+  const bmScore = bm25_score(gt0.ptr, gt0.len, g0.ptr, g0.len);
+  const cosSim = cosine_sim(qVecCopy, gtVecCopy, 384);
+  console.log(`✓ bm25_score: ${bmScore.toFixed(4)}, cosine_sim: ${cosSim.toFixed(4)}\n`);
+
 }).catch(err => {
   console.error('Validation error:', err);
   process.exit(1);
