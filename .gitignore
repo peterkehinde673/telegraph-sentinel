@@ -26,3 +26,7 @@ backend/node/dist/
 frontend/dist/
 .pytest_cache/
 .coverage
+
+# Explicitly track and preserve WASM distribution artifacts
+!wasm/dist/*.wasm
+!docs/*.wasm
