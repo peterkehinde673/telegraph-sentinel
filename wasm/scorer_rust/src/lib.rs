@@ -1,5 +1,5 @@
 #![no_std]
-#![allow(clippy::missing_safety_doc)]
+#![allow(clippy::missing_safety_doc, static_mut_refs)]
 
 extern crate alloc;
 
