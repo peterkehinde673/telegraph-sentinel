@@ -1,5 +1,6 @@
 use alloc::vec::Vec;
 use alloc::string::String;
+use alloc::format;
 use libm::exp;
 
 #[inline]
@@ -368,12 +369,12 @@ pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
             // 0.8% - 2.0% error: 1.00 -> 0.82
             // 2.0% - 3.5% error: 0.82 -> 0.00
             // > 3.5% error: 0.00 (factual failure on spot crypto price)
-            let match_score = if rel_diff <= 0.008 {
+            let match_score = if rel_diff <= 0.005 {
                 1.00
-            } else if rel_diff <= 0.020 {
-                1.00 - 15.0 * (rel_diff - 0.008)
-            } else if rel_diff <= 0.035 {
-                0.82 * exp(-4000.0 * (rel_diff - 0.020) * (rel_diff - 0.020))
+            } else if rel_diff <= 0.010 {
+                1.00 - 50.0 * (rel_diff - 0.005)
+            } else if rel_diff <= 0.018 {
+                0.75 * exp(-20000.0 * (rel_diff - 0.010) * (rel_diff - 0.010))
             } else {
                 0.00
             };
@@ -584,7 +585,70 @@ pub fn is_common_query_word(w: &str) -> bool {
     )
 }
 
-pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str) -> f32 {
+pub const ALL_ASSET_CLASSES: &[&str] = &[
+    "btc", "eth", "sol", "ada", "xrp", "doge", "avax", "link", "matic",
+    "bnb", "arb", "op", "sui", "near", "inj", "tia", "kas", "mkr",
+    "uni", "aave", "tao", "render", "dot", "atom", "pepe", "bonk",
+];
+
+pub fn get_asset_aliases(cls: &str) -> &'static [&'static str] {
+    match cls {
+        "btc" => &["bitcoin", "btc"],
+        "eth" => &["ethereum", "eth"],
+        "sol" => &["solana", "sol"],
+        "ada" => &["cardano", "ada"],
+        "xrp" => &["ripple", "xrp"],
+        "doge" => &["dogecoin", "doge"],
+        "avax" => &["avalanche", "avax"],
+        "link" => &["chainlink", "link"],
+        "matic" => &["polygon", "matic", "pol"],
+        "bnb" => &["binance", "bnb"],
+        "arb" => &["arbitrum", "arb"],
+        "op" => &["optimism", "op"],
+        "sui" => &["sui"],
+        "near" => &["near"],
+        "inj" => &["injective", "inj"],
+        "tia" => &["celestia", "tia"],
+        "kas" => &["kaspa", "kas"],
+        "mkr" => &["makerdao", "mkr", "maker"],
+        "uni" => &["uniswap", "uni"],
+        "aave" => &["aave"],
+        "tao" => &["bittensor", "tao"],
+        "render" => &["render", "rndr"],
+        "dot" => &["polkadot", "dot"],
+        "atom" => &["cosmos", "atom"],
+        "pepe" => &["pepe"],
+        "bonk" => &["bonk"],
+        _ => &[],
+    }
+}
+
+fn get_sim_for_class(q_vec: &[f32], cls: &str) -> f32 {
+    let aliases = get_asset_aliases(cls);
+    let mut max_sim = -1.0f32;
+    for a in aliases {
+        let templates = [
+            format!("What is the price of {}?", a),
+            format!("What is {} spot price?", a),
+            format!("What is {} price?", a),
+            format!("What is the current price of {}?", a),
+            format!("What is {} token price?", a),
+            format!("What is {} token value?", a),
+            format!("{} price", a),
+        ];
+        for t in &templates {
+            let enc = crate::tokenizer::tokenize(t);
+            let t_vec = crate::embed::run(&enc);
+            let sim = crate::math::cosine(q_vec, &t_vec);
+            if sim > max_sim {
+                max_sim = sim;
+            }
+        }
+    }
+    max_sim
+}
+
+pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str, q_vec: &[f32]) -> f32 {
     let q_words = extract_words(q_text);
     let gt_words = extract_words(gt_text);
     let cand_words = extract_words(cand_text);
@@ -665,9 +729,50 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str) ->
         }
 
         if has_target_match {
-            1.00
+            return 1.00;
         } else if cand_competing_known {
-            0.00
+            return 0.00;
+        } else {
+            return 1.00;
+        }
+    }
+
+    // 3. Fallback for cached evaluation when q_text is empty and ground truth is concise:
+    if !q_vec.is_empty() {
+        let mut cand_assets = Vec::new();
+        for cw in &cand_words {
+            if is_exchange_or_platform(cw) {
+                continue;
+            }
+            if let Some(cls) = get_canonical_asset_class(cw) {
+                if cls != "usdt" && cls != "usdc" && !cand_assets.contains(&cls) {
+                    cand_assets.push(cls);
+                }
+            }
+        }
+
+        if !cand_assets.is_empty() {
+            let mut global_best_sim = -1.0f32;
+            for &cls in ALL_ASSET_CLASSES {
+                let s = get_sim_for_class(q_vec, cls);
+                if s > global_best_sim {
+                    global_best_sim = s;
+                }
+            }
+
+            let mut any_asset_matched_qvec = false;
+            for &cand_cls in &cand_assets {
+                let s = get_sim_for_class(q_vec, cand_cls);
+                if s >= global_best_sim - 0.0005 {
+                    any_asset_matched_qvec = true;
+                    break;
+                }
+            }
+            if any_asset_matched_qvec {
+                1.00
+            } else {
+                0.00
+            }
         } else {
             1.00
         }

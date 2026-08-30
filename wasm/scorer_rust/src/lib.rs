@@ -105,7 +105,7 @@ unsafe fn signals_from_vecs(
     let lexical = bm25::score(ground_truth, miner_answer);
 
     let num_mult = numeric::check_numeric_consistency(ground_truth, miner_answer);
-    let entity_mult = numeric::check_entity_consistency(question, ground_truth, miner_answer);
+    let entity_mult = numeric::check_entity_consistency(question, ground_truth, miner_answer, q_vec);
     let currency_mult = numeric::check_currency_consistency(question, ground_truth, miner_answer);
     let polarity_mult = numeric::check_polarity_and_negation(ground_truth, miner_answer);
     let stale_mult = numeric::check_stale_and_historical(question, ground_truth, miner_answer);
