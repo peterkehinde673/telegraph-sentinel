@@ -11,13 +11,12 @@ This report documents the verification, tracking, and synchronization status of 
 | Property | Workspace Primary Artifact | Workspace Mirror Artifact |
 | :--- | :--- | :--- |
 | **Exact File Path** | `wasm/dist/telegraph_sentinel_scorer.wasm` | `docs/sentinel_scorer.wasm` |
-| **Exact Byte Size** | `60,865 bytes` | `60,865 bytes` |
-| **SHA-256 Hash** | `0116db4aea537375411af7b07a31249c216424cac35651868627c2546a5deccd` | `0116db4aea537375411af7b07a31249c216424cac35651868627c2546a5deccd` |
+| **Exact Byte Size** | `77,663 bytes` | `77,663 bytes` |
+| **SHA-256 Hash** | `46b6682c62ecebd3cb1aa5c36571a75c2590956b70752a7b8de24c8134276645` | `46b6682c62ecebd3cb1aa5c36571a75c2590956b70752a7b8de24c8134276645` |
 | **Magic Header** | `0x00 0x61 0x73 0x6d` (`\0asm`) | `0x00 0x61 0x73 0x6d` (`\0asm`) |
 | **cmp Verification** | Byte-for-byte identical (Exit Code: 0, 0 byte differences) | Byte-for-byte identical (Exit Code: 0, 0 byte differences) |
 | **Git Tracking Status** | **Tracked** (`git ls-files` confirmed) | **Tracked** (`git ls-files` confirmed) |
 | **.gitignore Exemption** | Explicitly whitelisted (`!wasm/dist/*.wasm`) | Explicitly whitelisted (`!docs/*.wasm`) |
-| **Git Commit SHA** | `f6f3763` | `f6f3763` |
 
 ---
 
@@ -25,12 +24,12 @@ This report documents the verification, tracking, and synchronization status of 
 
 ```bash
 $ wc -c wasm/dist/telegraph_sentinel_scorer.wasm docs/sentinel_scorer.wasm
-60865 wasm/dist/telegraph_sentinel_scorer.wasm
-60865 docs/sentinel_scorer.wasm
+77663 wasm/dist/telegraph_sentinel_scorer.wasm
+77663 docs/sentinel_scorer.wasm
 
 $ sha256sum wasm/dist/telegraph_sentinel_scorer.wasm docs/sentinel_scorer.wasm
-0116db4aea537375411af7b07a31249c216424cac35651868627c2546a5deccd  wasm/dist/telegraph_sentinel_scorer.wasm
-0116db4aea537375411af7b07a31249c216424cac35651868627c2546a5deccd  docs/sentinel_scorer.wasm
+46b6682c62ecebd3cb1aa5c36571a75c2590956b70752a7b8de24c8134276645  wasm/dist/telegraph_sentinel_scorer.wasm
+46b6682c62ecebd3cb1aa5c36571a75c2590956b70752a7b8de24c8134276645  docs/sentinel_scorer.wasm
 
 $ cmp wasm/dist/telegraph_sentinel_scorer.wasm docs/sentinel_scorer.wasm
 # Output: (silent, exit code 0 - identical bytes)

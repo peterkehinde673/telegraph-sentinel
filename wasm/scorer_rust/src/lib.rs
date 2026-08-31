@@ -104,9 +104,35 @@ unsafe fn signals_from_vecs(
     let semantic_sim = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
-    let num_mult = numeric::check_numeric_consistency(ground_truth, miner_answer);
+    let target_asset = if !question.is_empty() || !ground_truth.is_empty() {
+        let combined = alloc::format!("{} {}", question, ground_truth);
+        let lower = to_lower_str(&combined);
+        if let Some(multi) = numeric::detect_multiword_asset(&lower) {
+            Some(multi)
+        } else {
+            let mut found = None;
+            for w in numeric::extract_words(ground_truth) {
+                if let Some(cls) = numeric::get_canonical_asset_class(&w) {
+                    found = Some(cls);
+                    break;
+                }
+            }
+            if found.is_none() {
+                for w in numeric::extract_words(question) {
+                    if let Some(cls) = numeric::get_canonical_asset_class(&w) {
+                        found = Some(cls);
+                        break;
+                    }
+                }
+            }
+            found
+        }
+    } else {
+        None
+    };
+    let num_mult = numeric::check_numeric_consistency_with_target(ground_truth, miner_answer, target_asset);
     let entity_mult = numeric::check_entity_consistency(question, ground_truth, miner_answer, q_vec);
-    let currency_mult = numeric::check_currency_consistency(question, ground_truth, miner_answer);
+    let currency_mult = numeric::check_currency_consistency(question, ground_truth, miner_answer, q_vec);
     let polarity_mult = numeric::check_polarity_and_negation(ground_truth, miner_answer);
     let stale_mult = numeric::check_stale_and_historical(question, ground_truth, miner_answer);
     let hedge_mult = numeric::check_hedging_and_uncertainty(miner_answer);
