@@ -2,8 +2,8 @@
   "intent": "CRYPTO_PRICE",
   "wasm_path": "wasm/dist/telegraph_sentinel_scorer.wasm",
   "mirror_path": "docs/sentinel_scorer.wasm",
-  "byte_size": 96092,
-  "sha256": "79121087104f537fbadee4ea3cd060f427eec4f75494d40a0341d0aa3f0cd999",
+  "byte_size": 97451,
+  "sha256": "9e76fe1c2539a78a03f50869c8af71441795ecfac3ed5935c0588219da7ad580",
   "byte_identical": true,
   "diagnostic_pairs": 15,
   "ordering_accuracy": 1,
@@ -14,6 +14,6 @@
   "worst_self_match": 1,
   "score_standard_deviation": 0.4939,
   "validation_passed": true,
-  "timestamp": "2026-08-31T13:38:46.495Z",
-  "git_commit": "352b868eb9a9b3d4909bd6a650045e5a0ba71d89"
+  "timestamp": "2026-08-31T15:30:37.225Z",
+  "git_commit": "b71ac141df10753444b6934a82d76095ba0c9652"
 }

@@ -1,7 +1,6 @@
 use alloc::vec::Vec;
 use alloc::string::String;
 use alloc::format;
-use libm::exp;
 
 #[inline]
 fn is_digit(c: char) -> bool {
@@ -667,12 +666,14 @@ pub fn check_numeric_consistency_with_target(gt_text: &str, cand_text: &str, tar
             let max_v = if gn.value > cn.value { gn.value } else { gn.value };
             let rel_diff = if max_v > 0.0 { diff / max_v } else { diff };
 
-            let match_score = if rel_diff <= 0.008 {
+            // Continuous crypto spot price tolerance:
+            // <= 0.3% error (spread/exchange delta): 1.00
+            // 0.3% - 0.8% error: steep decay to 0.00
+            // > 0.8% error: 0.00
+            let match_score = if rel_diff <= 0.003 {
                 1.00
-            } else if rel_diff <= 0.020 {
-                1.00 - 16.666 * (rel_diff - 0.008)
-            } else if rel_diff <= 0.035 {
-                0.80 * exp(-15000.0 * (rel_diff - 0.020) * (rel_diff - 0.020))
+            } else if rel_diff <= 0.008 {
+                1.00 - 200.0 * (rel_diff - 0.003)
             } else {
                 0.00
             };
@@ -723,7 +724,7 @@ pub fn check_numeric_consistency_with_target(gt_text: &str, cand_text: &str, tar
                     let diff = if gn.value > cn.value { gn.value - cn.value } else { cn.value - gn.value };
                     let max_v = if gn.value > cn.value { gn.value } else { gn.value };
                     let rel_diff = if max_v > 0.0 { diff / max_v } else { diff };
-                    if rel_diff > 0.035 {
+                    if rel_diff > 0.008 {
                         conflicting_claims += 1;
                     }
                 }
@@ -749,11 +750,6 @@ pub fn check_numeric_consistency_with_target(gt_text: &str, cand_text: &str, tar
     }
 
     score
-}
-
-#[allow(dead_code)]
-pub fn check_numeric_consistency(gt_text: &str, cand_text: &str) -> f32 {
-    check_numeric_consistency_with_target(gt_text, cand_text, None)
 }
 
 pub fn extract_words(text: &str) -> Vec<String> {
@@ -800,10 +796,11 @@ pub fn is_common_query_word(w: &str) -> bool {
     )
 }
 
-pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str, _q_vec: &[f32]) -> f32 {
+pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str, q_vec: &[f32]) -> f32 {
     let cand_lower = to_lower_str(cand_text);
     let cand_words = extract_words(cand_text);
 
+    // 1. Text-based target asset resolution
     let target_class = if !q_text.is_empty() || !gt_text.is_empty() {
         let combined = format!("{} {}", q_text, gt_text);
         let lower = to_lower_str(&combined);
@@ -867,6 +864,7 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str, _q
         }
     }
 
+    // 2. Dynamic unlisted asset extraction (when q_text is present)
     if !q_text.is_empty() {
         let mut dynamic_target_tokens: Vec<String> = Vec::new();
         let raw_q_tokens = extract_raw_tokens(q_text);
@@ -905,6 +903,62 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str, _q
                 return 0.00;
             } else {
                 return 1.00;
+            }
+        }
+    }
+
+    // 3. Cached-Mode Asset Disambiguation (q_text is empty, only q_vec exists)
+    if !q_vec.is_empty() {
+        let mut cand_assets = Vec::new();
+        if let Some(multi) = detect_multiword_asset(&cand_lower) {
+            cand_assets.push(multi);
+        } else {
+            for cw in &cand_words {
+                if is_exchange_or_platform(cw) {
+                    continue;
+                }
+                if let Some(cls) = get_canonical_asset_class(cw) {
+                    if cls != "usdt" && cls != "usdc" && !cand_assets.contains(&cls) {
+                        cand_assets.push(cls);
+                    }
+                }
+            }
+        }
+
+        if !cand_assets.is_empty() {
+            let mut has_any_match = false;
+            for &ca in &cand_assets {
+                let tmpl = match ca {
+                    "btc" => "What is the price of Bitcoin BTC?",
+                    "eth" => "What is the price of Ethereum ETH?",
+                    "sol" => "What is the price of Solana SOL?",
+                    "ada" => "What is the price of Cardano ADA?",
+                    "avax" => "What is the price of Avalanche AVAX?",
+                    "link" => "What is the price of Chainlink LINK?",
+                    "doge" => "What is the price of Dogecoin DOGE?",
+                    "dot" => "What is the price of Polkadot DOT?",
+                    "near" => "What is the price of Near Protocol NEAR?",
+                    "bch" => "What is the price of Bitcoin Cash BCH?",
+                    "etc" => "What is the price of Ethereum Classic ETC?",
+                    "xrp" => "What is the price of Ripple XRP?",
+                    _ => "",
+                };
+
+                if !tmpl.is_empty() {
+                    let enc = crate::tokenizer::tokenize(tmpl);
+                    let a_vec = crate::embed::run(&enc);
+                    let sim = crate::math::cosine(q_vec, &a_vec);
+                    if sim >= 0.50 {
+                        has_any_match = true;
+                        break;
+                    }
+                } else {
+                    has_any_match = true;
+                }
+            }
+
+            if !has_any_match {
+                return 0.00;
             }
         }
     }
