@@ -93,7 +93,7 @@ fn token_ids_for_word(word: &str) -> Vec<u32> {
 /// [103, VOCAB_SIZE) — avoids all special token IDs. Only used in
 /// projection mode; real_weights mode uses `wordpiece_tokenize` instead.
 #[cfg(not(feature = "real_weights"))]
-fn word_to_id(word: &str) -> u32 {
+pub fn word_to_id(word: &str) -> u32 {
     let h = fnv1a(word.as_bytes());
     (h % (VOCAB_SIZE as u64 - 103) + 103) as u32
 }

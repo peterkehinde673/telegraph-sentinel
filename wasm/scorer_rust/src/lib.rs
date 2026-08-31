@@ -25,8 +25,6 @@ const IDX_LEXICAL:      usize = 2;
 const IDX_LENGTH:       usize = 3;
 const IDX_COMPOSITE:    usize = 4;
 
-// Upper ceiling reserved exclusively for non-identical factual answers.
-// Exact normalized identity alone receives 1.0000.
 const MAX_NON_EXACT_SCORE: f32 = 0.9880;
 
 #[inline]
@@ -58,7 +56,6 @@ fn to_lower_str(s: &str) -> String {
     out
 }
 
-// Canonical text normalization for exact self-match detection
 fn is_normalized_identical(gt: &str, cand: &str) -> bool {
     let gt_t = gt.trim();
     let cand_t = cand.trim();
@@ -78,8 +75,6 @@ fn is_normalized_identical(gt: &str, cand: &str) -> bool {
     !clean_gt.is_empty() && clean_gt == clean_cand
 }
 
-// Strictly monotonic high-separation contrast curve for non-exact answers.
-// Guarantees output is strictly bounded in [0.0, MAX_NON_EXACT_SCORE].
 #[inline]
 fn apply_high_separation_curve(raw: f32) -> f32 {
     let x = math::clamp01(raw);
@@ -127,7 +122,7 @@ unsafe fn signals_from_vecs(
     let semantic_sim = math::cosine(gt_vec, ma_vec);
     let lexical = bm25::score(ground_truth, miner_answer);
 
-    let target_asset = if !question.is_empty() || !ground_truth.is_empty() {
+    let mut target_asset = if !question.is_empty() || !ground_truth.is_empty() {
         let combined = alloc::format!("{} {}", question, ground_truth);
         let lower = to_lower_str(&combined);
         if let Some(multi) = numeric::detect_multiword_asset(&lower) {
@@ -153,6 +148,10 @@ unsafe fn signals_from_vecs(
     } else {
         None
     };
+
+    if target_asset.is_none() {
+        target_asset = numeric::detect_asset_from_q_vec(q_vec);
+    }
 
     let num_mult = numeric::check_numeric_consistency_with_target(ground_truth, miner_answer, target_asset);
     let entity_mult = numeric::check_entity_consistency(question, ground_truth, miner_answer, q_vec);

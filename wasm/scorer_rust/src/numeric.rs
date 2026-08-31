@@ -43,7 +43,6 @@ pub struct NumberMatch {
     pub associated_asset: Option<&'static str>,
 }
 
-// Canonical asset aliases across all major/mid-cap cryptocurrencies
 pub fn get_canonical_asset_class(word: &str) -> Option<&'static str> {
     match word {
         "btc" | "bitcoin" | "xbt" | "sats" | "satoshi" => Some("btc"),
@@ -124,7 +123,6 @@ pub fn get_canonical_asset_class(word: &str) -> Option<&'static str> {
     }
 }
 
-// Find multi-word asset combinations
 pub fn detect_multiword_asset(text_lower: &str) -> Option<&'static str> {
     if text_lower.contains("bitcoin cash") {
         return Some("bch");
@@ -153,7 +151,96 @@ pub fn detect_multiword_asset(text_lower: &str) -> Option<&'static str> {
     None
 }
 
-// Check if word is an exchange name
+pub fn detect_asset_from_q_vec(q_vec: &[f32]) -> Option<&'static str> {
+    if q_vec.is_empty() {
+        return None;
+    }
+
+    // Check compound modifiers first
+    let compound_targets: &[(&str, &[&str])] = &[
+        ("bch", &["cash", "bitcoincash"]),
+        ("etc", &["classic", "ethereumclassic"]),
+        ("icp", &["computer", "internetcomputer"]),
+        ("steth", &["lido", "ldo"]),
+        ("wif", &["dogwifhat", "wif"]),
+    ];
+
+    for &(cls, words) in compound_targets {
+        for &w in words {
+            let enc = crate::tokenizer::tokenize(w);
+            let w_vec = crate::embed::run(&enc);
+            let sim = crate::math::cosine(q_vec, &w_vec);
+            if sim >= 0.40 {
+                return Some(cls);
+            }
+        }
+    }
+
+    let asset_targets: &[(&str, &[&str])] = &[
+        ("btc", &["bitcoin", "btc"]),
+        ("eth", &["ethereum", "eth"]),
+        ("sol", &["solana", "sol"]),
+        ("ada", &["cardano", "ada"]),
+        ("avax", &["avalanche", "avax"]),
+        ("link", &["chainlink", "link"]),
+        ("doge", &["dogecoin", "doge"]),
+        ("dot", &["polkadot", "dot"]),
+        ("near", &["near"]),
+        ("xrp", &["ripple", "xrp"]),
+        ("xmr", &["monero", "xmr"]),
+        ("ltc", &["litecoin", "ltc"]),
+        ("shib", &["shiba", "shib"]),
+        ("mkr", &["maker", "mkr"]),
+        ("arb", &["arbitrum", "arb"]),
+        ("op", &["optimism", "op"]),
+        ("sui", &["sui"]),
+        ("tia", &["celestia", "tia"]),
+        ("inj", &["injective", "inj"]),
+        ("kas", &["kaspa", "kas"]),
+        ("trx", &["tron", "trx"]),
+        ("ton", &["toncoin", "ton"]),
+        ("algo", &["algorand", "algo"]),
+        ("vet", &["vechain", "vet"]),
+        ("xlm", &["stellar", "xlm"]),
+        ("ftm", &["fantom", "ftm"]),
+        ("rune", &["thorchain", "rune"]),
+        ("sei", &["sei"]),
+        ("strk", &["starknet", "strk"]),
+        ("wld", &["worldcoin", "wld"]),
+        ("ena", &["ethena", "ena"]),
+        ("ondo", &["ondo"]),
+        ("pendle", &["pendle"]),
+        ("bonk", &["bonk"]),
+        ("floki", &["floki"]),
+        ("jup", &["jupiter", "jup"]),
+        ("pyth", &["pyth"]),
+        ("fet", &["fet", "asi"]),
+        ("comp", &["compound", "comp"]),
+        ("sushi", &["sushi"]),
+    ];
+
+    let mut best_sim = -1.0f32;
+    let mut best_cls = None;
+
+    for &(cls, words) in asset_targets {
+        for &w in words {
+            let enc = crate::tokenizer::tokenize(w);
+            let w_vec = crate::embed::run(&enc);
+            let sim = crate::math::cosine(q_vec, &w_vec);
+            if sim > best_sim {
+                best_sim = sim;
+                best_cls = Some(cls);
+            }
+        }
+    }
+
+    if best_sim >= 0.40 {
+        best_cls
+    } else {
+        None
+    }
+}
+
 pub fn is_exchange_or_platform(word: &str) -> bool {
     matches!(
         word,
@@ -263,15 +350,9 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
                 continue;
             }
 
-            // 2. Clock Times: "14:00"
-            if i < len && chars[i] == ':' && i + 2 < len && is_digit(chars[i + 1]) && is_digit(chars[i + 2]) {
-                i += 3;
-                if i < len && chars[i] == ':' && i + 2 < len && is_digit(chars[i + 1]) && is_digit(chars[i + 2]) {
-                    i += 3;
-                }
-                continue;
-            }
-            if start_idx >= 1 && chars[start_idx - 1] == ':' {
+            // 2. Exact Clock Times check
+            let is_clock_time = !has_prefix_curr && start_idx >= 2 && chars[start_idx - 1] == ':' && is_digit(chars[start_idx - 2]);
+            if is_clock_time {
                 continue;
             }
 
@@ -666,10 +747,6 @@ pub fn check_numeric_consistency_with_target(gt_text: &str, cand_text: &str, tar
             let max_v = if gn.value > cn.value { gn.value } else { gn.value };
             let rel_diff = if max_v > 0.0 { diff / max_v } else { diff };
 
-            // Continuous crypto spot price tolerance:
-            // <= 0.3% error (spread/exchange delta): 1.00
-            // 0.3% - 0.8% error: steep decay to 0.00
-            // > 0.8% error: 0.00
             let match_score = if rel_diff <= 0.003 {
                 1.00
             } else if rel_diff <= 0.008 {
@@ -793,6 +870,7 @@ pub fn is_common_query_word(w: &str) -> bool {
             | "now" | "today" | "how" | "much" | "in" | "usd" | "token" | "coin"
             | "rate" | "value" | "worth" | "at" | "for" | "a" | "an" | "and"
             | "to" | "live" | "latest" | "2024" | "2025" | "2026"
+            | "can" | "you" | "tell" | "me" | "right" | "please" | "give" | "check"
     )
 }
 
@@ -828,7 +906,12 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str, q_
         None
     };
 
-    if let Some(target) = target_class {
+    let resolved_target = match target_class {
+        Some(cls) => Some(cls),
+        None => detect_asset_from_q_vec(q_vec),
+    };
+
+    if let Some(target) = resolved_target {
         let cand_multi = detect_multiword_asset(&cand_lower);
 
         let mut cand_has_target = false;
@@ -903,62 +986,6 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str, q_
                 return 0.00;
             } else {
                 return 1.00;
-            }
-        }
-    }
-
-    // 3. Cached-Mode Asset Disambiguation (q_text is empty, only q_vec exists)
-    if !q_vec.is_empty() {
-        let mut cand_assets = Vec::new();
-        if let Some(multi) = detect_multiword_asset(&cand_lower) {
-            cand_assets.push(multi);
-        } else {
-            for cw in &cand_words {
-                if is_exchange_or_platform(cw) {
-                    continue;
-                }
-                if let Some(cls) = get_canonical_asset_class(cw) {
-                    if cls != "usdt" && cls != "usdc" && !cand_assets.contains(&cls) {
-                        cand_assets.push(cls);
-                    }
-                }
-            }
-        }
-
-        if !cand_assets.is_empty() {
-            let mut has_any_match = false;
-            for &ca in &cand_assets {
-                let tmpl = match ca {
-                    "btc" => "What is the price of Bitcoin BTC?",
-                    "eth" => "What is the price of Ethereum ETH?",
-                    "sol" => "What is the price of Solana SOL?",
-                    "ada" => "What is the price of Cardano ADA?",
-                    "avax" => "What is the price of Avalanche AVAX?",
-                    "link" => "What is the price of Chainlink LINK?",
-                    "doge" => "What is the price of Dogecoin DOGE?",
-                    "dot" => "What is the price of Polkadot DOT?",
-                    "near" => "What is the price of Near Protocol NEAR?",
-                    "bch" => "What is the price of Bitcoin Cash BCH?",
-                    "etc" => "What is the price of Ethereum Classic ETC?",
-                    "xrp" => "What is the price of Ripple XRP?",
-                    _ => "",
-                };
-
-                if !tmpl.is_empty() {
-                    let enc = crate::tokenizer::tokenize(tmpl);
-                    let a_vec = crate::embed::run(&enc);
-                    let sim = crate::math::cosine(q_vec, &a_vec);
-                    if sim >= 0.50 {
-                        has_any_match = true;
-                        break;
-                    }
-                } else {
-                    has_any_match = true;
-                }
-            }
-
-            if !has_any_match {
-                return 0.00;
             }
         }
     }

@@ -2,8 +2,8 @@
 
 | Artifact Path | Size (Bytes) | SHA-256 Checksum | Sync Status |
 | :--- | :--- | :--- | :--- |
-| `wasm/dist/telegraph_sentinel_scorer.wasm` | `96092` | `79121087104f537fbadee4ea3cd060f427eec4f75494d40a0341d0aa3f0cd999` | PRIMARY ✓ |
-| `docs/sentinel_scorer.wasm` | `96092` | `79121087104f537fbadee4ea3cd060f427eec4f75494d40a0341d0aa3f0cd999` | SYNCHRONIZED ✓ |
+| `wasm/dist/telegraph_sentinel_scorer.wasm` | `102565` | `109b113818642c32ce3ef6aa8737a8b0a84cbb035fd14c4099879818af7777da` | PRIMARY ✓ |
+| `docs/sentinel_scorer.wasm` | `102565` | `109b113818642c32ce3ef6aa8737a8b0a84cbb035fd14c4099879818af7777da` | SYNCHRONIZED ✓ |
 
 ## Verification Command
 ```bash
