@@ -130,6 +130,7 @@ unsafe fn signals_from_vecs(
     } else {
         None
     };
+
     let num_mult = numeric::check_numeric_consistency_with_target(ground_truth, miner_answer, target_asset);
     let entity_mult = numeric::check_entity_consistency(question, ground_truth, miner_answer, q_vec);
     let currency_mult = numeric::check_currency_consistency(question, ground_truth, miner_answer, q_vec);
@@ -149,12 +150,10 @@ unsafe fn signals_from_vecs(
 
     let len_quality = math::sigmoid((miner_answer.len() as f32 - 20.0) / 15.0);
 
-    // If factual score is near zero (e.g. wrong price/entity/currency), correctness is zero.
-    // If factual score is high, it is gently modulated by question relevance and semantic fluency.
     let base_correctness = if factual_score < 0.02 {
         0.0
     } else {
-        let fluency_bonus = 0.90 + (0.07 * relevance) + (0.03 * semantic_sim);
+        let fluency_bonus = 0.90 + (0.07 * math::clamp01(relevance)) + (0.03 * math::clamp01(semantic_sim));
         math::clamp01(factual_score * fluency_bonus)
     };
 
@@ -162,14 +161,12 @@ unsafe fn signals_from_vecs(
 }
 
 #[inline]
-fn composite(relevance: f32, correctness: f32, _lexical: f32, _len_quality: f32) -> f32 {
+fn composite(_relevance: f32, correctness: f32, _lexical: f32, _len_quality: f32) -> f32 {
     if correctness <= 0.01 {
         return 0.0;
     }
 
-    // Factual correctness dominates completely.
-    let raw = correctness * (0.92 + 0.08 * relevance);
-    apply_high_separation_curve(raw)
+    apply_high_separation_curve(correctness)
 }
 
 #[no_mangle]
