@@ -739,7 +739,6 @@ pub fn check_numeric_consistency_with_target(gt_text: &str, cand_text: &str, tar
         let mut best_idx = None;
 
         for (idx, cn) in cand_nums.iter().enumerate() {
-            // Check if this candidate number is explicitly attached to a competing asset
             if let Some(target) = target_asset {
                 if let Some(cand_asset) = cn.associated_asset {
                     if cand_asset != target && cand_asset != "usdt" && cand_asset != "usdc" {
@@ -747,7 +746,6 @@ pub fn check_numeric_consistency_with_target(gt_text: &str, cand_text: &str, tar
                     }
                 }
             } else if !q_vec.is_empty() {
-                // Vector-based dynamic asset check
                 if let Some(cand_asset) = cn.associated_asset {
                     let sim = word_sim_to_q_vec(cand_asset, q_vec);
                     if sim < 0.15 && get_canonical_asset_class(cand_asset).is_some() {
@@ -1005,20 +1003,20 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str, q_
 
     // 3. Universal Vector-based Dynamic Asset Disambiguation (Cached Mode when q_text is empty)
     if !q_vec.is_empty() {
-        let mut cand_tokens = Vec::new();
+        let mut cand_tokens: Vec<String> = Vec::new();
         for cw in &cand_words {
             if is_common_query_word(cw) || is_exchange_or_platform(cw) || cw.len() < 2 {
                 continue;
             }
-            if !cand_tokens.contains(cw) {
-                cand_tokens.push(cw.as_str());
+            if !cand_tokens.iter().any(|t| t == cw) {
+                cand_tokens.push(cw.clone());
             }
         }
 
         let mut has_query_token_match = false;
         let mut has_unrelated_known_asset = false;
 
-        for &tok in &cand_tokens {
+        for tok in &cand_tokens {
             let sim = word_sim_to_q_vec(tok, q_vec);
             if sim >= 0.35 {
                 has_query_token_match = true;

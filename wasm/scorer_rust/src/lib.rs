@@ -13,6 +13,10 @@ mod math;
 mod numeric;
 mod tokenizer;
 
+/// Official Telegraph Protocol Semantic Scorer Module Release Descriptor
+pub const SCORER_INTENT: &str = "CRYPTO_PRICE";
+pub const SCORER_REVISION: &str = "v2.1.0-rel.20260901-ortho.splitmix64";
+
 const EMBED_DIM: usize = 384;
 static mut EMBED_BUF: [f32; EMBED_DIM] = [0f32; EMBED_DIM];
 

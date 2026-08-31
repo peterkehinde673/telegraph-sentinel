@@ -7,10 +7,10 @@ This diagnostic report is generated automatically by `wasm/crypto_price_15_diagn
 | Metric | Measured Value |
 | :--- | :--- |
 | **Intent Target** | `CRYPTO_PRICE` |
-| **Evaluation Timestamp** | `2026-08-31T23:25:45.698Z` |
-| **Git Commit SHA** | `f335d7129465cfa12cd038a9845c17a2bebbeb4f` |
-| **WASM Binary Size** | `102,565 bytes` (~100.2 KB) |
-| **WASM SHA-256 Checksum** | `109b113818642c32ce3ef6aa8737a8b0a84cbb035fd14c4099879818af7777da` |
+| **Evaluation Timestamp** | `2026-08-31T23:43:42.912Z` |
+| **Git Commit SHA** | `1d008aaf13d143279a9a804df26aa11564babee2` |
+| **WASM Binary Size** | `100,878 bytes` (~98.5 KB) |
+| **WASM SHA-256 Checksum** | `f679b6a813dfb11318fd7310df5b1f66a4f2e97a57c83b6e0ec597f5105f32d1` |
 | **Mirror Synchronization** | `Byte-for-byte identical with docs/sentinel_scorer.wasm` |
 | **Total Comparison Pairs** | `15` |
 | **Ordering Accuracy** | **`15 / 15` (100.0%)** |
