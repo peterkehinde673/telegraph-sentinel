@@ -151,13 +151,21 @@ pub fn detect_multiword_asset(text_lower: &str) -> Option<&'static str> {
     None
 }
 
+pub fn word_sim_to_q_vec(w: &str, q_vec: &[f32]) -> f32 {
+    if q_vec.is_empty() || w.is_empty() {
+        return 0.0;
+    }
+    let enc = crate::tokenizer::tokenize(w);
+    let w_vec = crate::embed::run(&enc);
+    crate::math::cosine(q_vec, &w_vec)
+}
+
 pub fn detect_asset_from_q_vec(q_vec: &[f32]) -> Option<&'static str> {
     if q_vec.is_empty() {
         return None;
     }
 
-    // Check compound modifiers first
-    let compound_targets: &[(&str, &[&str])] = &[
+    let distinguishing_modifiers: &[(&str, &[&str])] = &[
         ("bch", &["cash", "bitcoincash"]),
         ("etc", &["classic", "ethereumclassic"]),
         ("icp", &["computer", "internetcomputer"]),
@@ -165,11 +173,9 @@ pub fn detect_asset_from_q_vec(q_vec: &[f32]) -> Option<&'static str> {
         ("wif", &["dogwifhat", "wif"]),
     ];
 
-    for &(cls, words) in compound_targets {
+    for &(cls, words) in distinguishing_modifiers {
         for &w in words {
-            let enc = crate::tokenizer::tokenize(w);
-            let w_vec = crate::embed::run(&enc);
-            let sim = crate::math::cosine(q_vec, &w_vec);
+            let sim = word_sim_to_q_vec(w, q_vec);
             if sim >= 0.40 {
                 return Some(cls);
             }
@@ -224,9 +230,7 @@ pub fn detect_asset_from_q_vec(q_vec: &[f32]) -> Option<&'static str> {
 
     for &(cls, words) in asset_targets {
         for &w in words {
-            let enc = crate::tokenizer::tokenize(w);
-            let w_vec = crate::embed::run(&enc);
-            let sim = crate::math::cosine(q_vec, &w_vec);
+            let sim = word_sim_to_q_vec(w, q_vec);
             if sim > best_sim {
                 best_sim = sim;
                 best_cls = Some(cls);
@@ -665,7 +669,7 @@ pub fn parse_numbers(text: &str) -> Vec<NumberMatch> {
     nums
 }
 
-pub fn check_numeric_consistency_with_target(gt_text: &str, cand_text: &str, target_asset: Option<&'static str>) -> f32 {
+pub fn check_numeric_consistency_with_target(gt_text: &str, cand_text: &str, target_asset: Option<&'static str>, q_vec: &[f32]) -> f32 {
     let gt_all = parse_numbers(gt_text);
     if gt_all.is_empty() {
         return 1.0;
@@ -735,9 +739,18 @@ pub fn check_numeric_consistency_with_target(gt_text: &str, cand_text: &str, tar
         let mut best_idx = None;
 
         for (idx, cn) in cand_nums.iter().enumerate() {
+            // Check if this candidate number is explicitly attached to a competing asset
             if let Some(target) = target_asset {
                 if let Some(cand_asset) = cn.associated_asset {
                     if cand_asset != target && cand_asset != "usdt" && cand_asset != "usdc" {
+                        continue;
+                    }
+                }
+            } else if !q_vec.is_empty() {
+                // Vector-based dynamic asset check
+                if let Some(cand_asset) = cn.associated_asset {
+                    let sim = word_sim_to_q_vec(cand_asset, q_vec);
+                    if sim < 0.15 && get_canonical_asset_class(cand_asset).is_some() {
                         continue;
                     }
                 }
@@ -987,6 +1000,42 @@ pub fn check_entity_consistency(q_text: &str, gt_text: &str, cand_text: &str, q_
             } else {
                 return 1.00;
             }
+        }
+    }
+
+    // 3. Universal Vector-based Dynamic Asset Disambiguation (Cached Mode when q_text is empty)
+    if !q_vec.is_empty() {
+        let mut cand_tokens = Vec::new();
+        for cw in &cand_words {
+            if is_common_query_word(cw) || is_exchange_or_platform(cw) || cw.len() < 2 {
+                continue;
+            }
+            if !cand_tokens.contains(cw) {
+                cand_tokens.push(cw.as_str());
+            }
+        }
+
+        let mut has_query_token_match = false;
+        let mut has_unrelated_known_asset = false;
+
+        for &tok in &cand_tokens {
+            let sim = word_sim_to_q_vec(tok, q_vec);
+            if sim >= 0.35 {
+                has_query_token_match = true;
+                break;
+            } else if sim < 0.15 {
+                if let Some(cls) = get_canonical_asset_class(tok) {
+                    if cls != "usdt" && cls != "usdc" {
+                        has_unrelated_known_asset = true;
+                    }
+                }
+            }
+        }
+
+        if has_query_token_match {
+            return 1.00;
+        } else if has_unrelated_known_asset {
+            return 0.00;
         }
     }
 

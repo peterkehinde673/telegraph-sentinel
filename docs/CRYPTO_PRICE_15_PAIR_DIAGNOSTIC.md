@@ -7,8 +7,8 @@ This diagnostic report is generated automatically by `wasm/crypto_price_15_diagn
 | Metric | Measured Value |
 | :--- | :--- |
 | **Intent Target** | `CRYPTO_PRICE` |
-| **Evaluation Timestamp** | `2026-08-31T17:16:59.904Z` |
-| **Git Commit SHA** | `75474ea29a2ef39695e32c617fb923dad72fb3c0` |
+| **Evaluation Timestamp** | `2026-08-31T23:25:45.698Z` |
+| **Git Commit SHA** | `f335d7129465cfa12cd038a9845c17a2bebbeb4f` |
 | **WASM Binary Size** | `102,565 bytes` (~100.2 KB) |
 | **WASM SHA-256 Checksum** | `109b113818642c32ce3ef6aa8737a8b0a84cbb035fd14c4099879818af7777da` |
 | **Mirror Synchronization** | `Byte-for-byte identical with docs/sentinel_scorer.wasm` |

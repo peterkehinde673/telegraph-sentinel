@@ -153,7 +153,7 @@ unsafe fn signals_from_vecs(
         target_asset = numeric::detect_asset_from_q_vec(q_vec);
     }
 
-    let num_mult = numeric::check_numeric_consistency_with_target(ground_truth, miner_answer, target_asset);
+    let num_mult = numeric::check_numeric_consistency_with_target(ground_truth, miner_answer, target_asset, q_vec);
     let entity_mult = numeric::check_entity_consistency(question, ground_truth, miner_answer, q_vec);
     let currency_mult = numeric::check_currency_consistency(question, ground_truth, miner_answer, q_vec);
     let polarity_mult = numeric::check_polarity_and_negation(ground_truth, miner_answer);
