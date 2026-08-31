@@ -1,45 +1,10 @@
-# WebAssembly Synchronization & Deployment Status
+# WebAssembly Build & Mirror Synchronization Status
 
-## 1. Executive Status: READY & CONFIRMED ON GITHUB ✓
-
-Both local workspace artifacts and live GitHub endpoints are synchronized, byte-for-byte identical, and serving the verified 66,719-byte WebAssembly scorer binary.
-
----
-
-## 2. Verified Artifact Audit
-
-| Property | Primary Telegraph Path | Mirror Path | Remote GitHub (`wasm/dist`) |
+| Artifact Path | Size (Bytes) | SHA-256 Checksum | Sync Status |
 | :--- | :--- | :--- | :--- |
-| **Path** | `wasm/dist/telegraph_sentinel_scorer.wasm` | `docs/sentinel_scorer.wasm` | `https://raw.githubusercontent.com/.../wasm/dist/...` |
-| **Exact Byte Size** | `77,663 bytes` | `77,663 bytes` | `77,663 bytes` |
-| **SHA-256 Checksum** | `46b6682c62ecebd3cb1aa5c36571a75c2590956b70752a7b8de24c8134276645` | `46b6682c62ecebd3cb1aa5c36571a75c2590956b70752a7b8de24c8134276645` | `46b6682c62ecebd3cb1aa5c36571a75c2590956b70752a7b8de24c8134276645` |
-| **Magic Header** | `\0asm` (`0x00 0x61 0x73 0x6d`) | `\0asm` (`0x00 0x61 0x73 0x6d`) | `\0asm` (`0x00 0x61 0x73 0x6d`) |
-| **Local Byte Comparison (`cmp`)** | Exit code `0` (0 byte differences) | Exit code `0` (0 byte differences) | Byte-for-byte match |
-| **Git Tracking** | Tracked via `git ls-files` (`!wasm/dist/*.wasm`) | Tracked via `git ls-files` (`!docs/*.wasm`) | Confirmed live on GitHub `main` |
+| `wasm/dist/telegraph_sentinel_scorer.wasm` | `96092` | `79121087104f537fbadee4ea3cd060f427eec4f75494d40a0341d0aa3f0cd999` | PRIMARY ✓ |
+| `docs/sentinel_scorer.wasm` | `96092` | `79121087104f537fbadee4ea3cd060f427eec4f75494d40a0341d0aa3f0cd999` | SYNCHRONIZED ✓ |
 
----
-
-## 3. Remote Verification Check
-
+## Verification Command
 ```bash
-# 1. Primary Artifact Live Check:
-curl -s -H "Cache-Control: no-cache" https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/wasm/dist/telegraph_sentinel_scorer.wasm | wc -c
-# Output: 66719
-
-curl -s -H "Cache-Control: no-cache" https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/wasm/dist/telegraph_sentinel_scorer.wasm | sha256sum
-# Output: f7d7eaa58104ad35944f396942cbb715be85aed2d2a9a470ba0a94b5c24424a6  -
-
-# 2. Mirror Artifact Live Check:
-curl -s -H "Cache-Control: no-cache" https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel_scorer.wasm | wc -c
-# Output: 66719
-
-curl -s -H "Cache-Control: no-cache" https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/docs/sentinel_scorer.wasm | sha256sum
-# Output: f7d7eaa58104ad35944f396942cbb715be85aed2d2a9a470ba0a94b5c24424a6  -
-```
-
----
-
-## 4. Telegraph Protocol Integration Endpoint
-
-Use the primary raw binary endpoint for Telegraph Protocol registration:
-`https://raw.githubusercontent.com/peterkehinde673/telegraph-sentinel/main/wasm/dist/telegraph_sentinel_scorer.wasm`
+cmp wasm/dist/telegraph_sentinel_scorer.wasm docs/sentinel_scorer.wasm && echo "BYTE-IDENTICAL"

@@ -7,19 +7,19 @@ This diagnostic report is generated automatically by `wasm/crypto_price_15_diagn
 | Metric | Measured Value |
 | :--- | :--- |
 | **Intent Target** | `CRYPTO_PRICE` |
-| **Evaluation Timestamp** | `2026-08-31T12:54:49.955Z` |
-| **Git Commit SHA** | `d0a5bb214057d01b8595069ecbd6c3f46c0b2773` |
-| **WASM Binary Size** | `94,030 bytes` (~91.8 KB) |
-| **WASM SHA-256 Checksum** | `ef180529562607da8c9d649f24f4f83327cf84ce360a1e7ef91aa7d7f5a2ea24` |
+| **Evaluation Timestamp** | `2026-08-31T13:38:46.495Z` |
+| **Git Commit SHA** | `352b868eb9a9b3d4909bd6a650045e5a0ba71d89` |
+| **WASM Binary Size** | `96,092 bytes` (~93.8 KB) |
+| **WASM SHA-256 Checksum** | `79121087104f537fbadee4ea3cd060f427eec4f75494d40a0341d0aa3f0cd999` |
 | **Mirror Synchronization** | `Byte-for-byte identical with docs/sentinel_scorer.wasm` |
 | **Total Comparison Pairs** | `15` |
 | **Ordering Accuracy** | **`15 / 15` (100.0%)** |
-| **Average GOOD Score** | **`0.9998`** |
+| **Average GOOD Score** | **`0.9878`** |
 | **Average BAD Score** | **`0.0000`** |
-| **Average Separation Margin** | **`+0.9998`** (Threshold: > `0.800`) |
-| **Minimum Separation Margin** | **`+0.9996`** |
+| **Average Separation Margin** | **`+0.9878`** (Threshold: > `0.800`) |
+| **Minimum Separation Margin** | **`+0.9876`** |
 | **Worst Self-Match Score** | **`1.0000`** |
-| **Score Standard Deviation** | **`0.4999`** |
+| **Score Standard Deviation** | **`0.4939`** |
 | **Failed Pairs** | `None (0 failed pairs)` |
 
 ---
@@ -28,21 +28,21 @@ This diagnostic report is generated automatically by `wasm/crypto_price_15_diagn
 
 | # | Query | Ground Truth | GOOD Answer | BAD Answer | GOOD Score | BAD Score | Margin | Result | Failure Mode / Verification |
 | :- | :--- | :--- | :--- | :--- | :---: | :---: | :---: | :---: | :--- |
-| **1** | `What is the price of Bitcoin?` | `$65,400` | "Bitcoin (BTC) is currently trading at $65,400 USD." | "Bitcoin (BTC) is currently trading at $12,000 USD." | `0.9996` | `0.0000` | `+0.9996` | **PASS ✓** | Exact spot price match in USD vs severe ($12,000) factual discrepancy. |
-| **2** | `What is Ethereum price?` | `$3,480` | "Ethereum is trading at $3,480.00 USD (+1.40% 24h)." | "Ethereum is trading at $850.00 USD (+1.40% 24h)." | `0.9997` | `0.0000` | `+0.9997` | **PASS ✓** | Valid spot price with +24h interval delta vs completely false price with same delta format. |
-| **3** | `What is Solana spot price?` | `$145.50` | "1 SOL = $145.50 USD." | "1 SOL = $22.00 USD." | `0.9998` | `0.0000` | `+0.9998` | **PASS ✓** | Accurate oracle price with unit prefix (1 SOL) vs incorrect rate with unit prefix. |
-| **4** | `What is Avalanche price?` | `$28.40` | "As of August 30, 2026, AVAX is $28.40 USD." | "As of August 30, 2026, AVAX is $4.10 USD." | `0.9997` | `0.0000` | `+0.9997` | **PASS ✓** | Correct spot price contextualized with date timestamp vs false price with same date. |
-| **5** | `What is Chainlink price?` | `$11.80` | "LINK is $11.80 with $2.5B 24h volume, ranked #15." | "LINK is $1.50 with $2.5B 24h volume, ranked #15." | `0.9999` | `0.0000` | `+0.9999` | **PASS ✓** | Accurate price alongside supplemental volume/rank metadata vs incorrect price. |
-| **6** | `What is Arbitrum spot price?` | `$0.55` | "ARB is trading at 55 cents." | "ARB is trading at 5 cents." | `0.9999` | `0.0000` | `+0.9999` | **PASS ✓** | Properly converted cents notation (55 cents = $0.55) vs incorrect value (5 cents = $0.05). |
-| **7** | `What is Bitcoin price in USD?` | `$65,400` | "BTC is currently trading at $65.4k." | "BTC is currently trading at $25.4k." | `0.9999` | `0.0000` | `+0.9999` | **PASS ✓** | Correct thousands multiplier ($65.4k = $65,400) vs wrong multiplier value ($25.4k). |
-| **8** | `What is the current price of Celestia?` | `$5.20` | "Celestia (TIA) is currently $5.20 USD." | "Celestia (TIA) is currently $0.45 USD." | `0.9996` | `0.0000` | `+0.9996` | **PASS ✓** | Dynamic unlisted cryptocurrency generalization with correct price vs wrong value. |
-| **9** | `What is the price of Solana?` | `$145.50` | "Solana is $145.50." | "Cardano is $145.50." | `1.0000` | `0.0000` | `+1.0000` | **PASS ✓** | Valid asset attribution vs competitor/wrong-asset substitution with identical number. |
-| **10** | `What is the price of Ethereum?` | `$3,480` | "Ethereum is currently trading at $3,480." | "Ethereum is not trading at $3,480." | `0.9998` | `0.0000` | `+0.9998` | **PASS ✓** | Affirmative factual statement vs direct syntactic negation containing identical numbers. |
-| **11** | `What is the price of Bitcoin?` | `$65,400` | "Bitcoin spot price is $65,400." | "Bitcoin all-time high was $65,400 in 2021." | `0.9997` | `0.0000` | `+0.9997` | **PASS ✓** | Current live spot price vs historical / stale ATH claim misrepresenting market state. |
-| **12** | `What is Solana price in USD?` | `$145.50` | "Solana is $145.50 USD." | "Solana is 145.50 EUR." | `1.0000` | `0.0000` | `+1.0000` | **PASS ✓** | Correct fiat currency denominated in USD vs currency mismatch (EUR). |
-| **13** | `What is Bitcoin price?` | `$65,400` | "Bitcoin is trading between $65,300 and $65,500." | "Bitcoin is trading between $10,000 and $20,000." | `0.9999` | `0.0000` | `+0.9999` | **PASS ✓** | Accurate tight price band spanning ground truth vs completely disjoint price band. |
-| **14** | `What is Ethereum price?` | `$3,480` | "Ethereum is $3,480." | "Ethereum is $2,700." | `0.9999` | `0.0000` | `+0.9999` | **PASS ✓** | Exact spot price vs near-miss price (>22% deviation) penalized via continuous error curve. |
-| **15** | `What is Dogecoin spot price?` | `$0.10` | "DOGE is trading at $0.10." | "DOGE is unconfirmed and rumored around $0.10 maybe." | `0.9998` | `0.0000` | `+0.9998` | **PASS ✓** | Definitive authoritative spot price vs speculative/hedged uncertain rumor. |
+| **1** | `What is the price of Bitcoin?` | `$65,400` | "Bitcoin (BTC) is currently trading at $65,400 USD." | "Bitcoin (BTC) is currently trading at $12,000 USD." | `0.9876` | `0.0000` | `+0.9876` | **PASS ✓** | Exact spot price match in USD vs severe ($12,000) factual discrepancy. |
+| **2** | `What is Ethereum price?` | `$3,480` | "Ethereum is trading at $3,480.00 USD (+1.40% 24h)." | "Ethereum is trading at $850.00 USD (+1.40% 24h)." | `0.9877` | `0.0000` | `+0.9877` | **PASS ✓** | Valid spot price with +24h interval delta vs completely false price with same delta format. |
+| **3** | `What is Solana spot price?` | `$145.50` | "1 SOL = $145.50 USD." | "1 SOL = $22.00 USD." | `0.9878` | `0.0000` | `+0.9878` | **PASS ✓** | Accurate oracle price with unit prefix (1 SOL) vs incorrect rate with unit prefix. |
+| **4** | `What is Avalanche price?` | `$28.40` | "As of August 30, 2026, AVAX is $28.40 USD." | "As of August 30, 2026, AVAX is $4.10 USD." | `0.9877` | `0.0000` | `+0.9877` | **PASS ✓** | Correct spot price contextualized with date timestamp vs false price with same date. |
+| **5** | `What is Chainlink price?` | `$11.80` | "LINK is $11.80 with $2.5B 24h volume, ranked #15." | "LINK is $1.50 with $2.5B 24h volume, ranked #15." | `0.9879` | `0.0000` | `+0.9879` | **PASS ✓** | Accurate price alongside supplemental volume/rank metadata vs incorrect price. |
+| **6** | `What is Arbitrum spot price?` | `$0.55` | "ARB is trading at 55 cents." | "ARB is trading at 5 cents." | `0.9879` | `0.0000` | `+0.9879` | **PASS ✓** | Properly converted cents notation (55 cents = $0.55) vs incorrect value (5 cents = $0.05). |
+| **7** | `What is Bitcoin price in USD?` | `$65,400` | "BTC is currently trading at $65.4k." | "BTC is currently trading at $25.4k." | `0.9879` | `0.0000` | `+0.9879` | **PASS ✓** | Correct thousands multiplier ($65.4k = $65,400) vs wrong multiplier value ($25.4k). |
+| **8** | `What is the current price of Celestia?` | `$5.20` | "Celestia (TIA) is currently $5.20 USD." | "Celestia (TIA) is currently $0.45 USD." | `0.9876` | `0.0000` | `+0.9876` | **PASS ✓** | Dynamic unlisted cryptocurrency generalization with correct price vs wrong value. |
+| **9** | `What is the price of Solana?` | `$145.50` | "Solana is $145.50." | "Cardano is $145.50." | `0.9880` | `0.0000` | `+0.9880` | **PASS ✓** | Valid asset attribution vs competitor/wrong-asset substitution with identical number. |
+| **10** | `What is the price of Ethereum?` | `$3,480` | "Ethereum is currently trading at $3,480." | "Ethereum is not trading at $3,480." | `0.9878` | `0.0000` | `+0.9878` | **PASS ✓** | Affirmative factual statement vs direct syntactic negation containing identical numbers. |
+| **11** | `What is the price of Bitcoin?` | `$65,400` | "Bitcoin spot price is $65,400." | "Bitcoin all-time high was $65,400 in 2021." | `0.9877` | `0.0000` | `+0.9877` | **PASS ✓** | Current live spot price vs historical / stale ATH claim misrepresenting market state. |
+| **12** | `What is Solana price in USD?` | `$145.50` | "Solana is $145.50 USD." | "Solana is 145.50 EUR." | `0.9880` | `0.0000` | `+0.9880` | **PASS ✓** | Correct fiat currency denominated in USD vs currency mismatch (EUR). |
+| **13** | `What is Bitcoin price?` | `$65,400` | "Bitcoin is trading between $65,300 and $65,500." | "Bitcoin is trading between $10,000 and $20,000." | `0.9879` | `0.0000` | `+0.9879` | **PASS ✓** | Accurate tight price band spanning ground truth vs completely disjoint price band. |
+| **14** | `What is Ethereum price?` | `$3,480` | "Ethereum is $3,480." | "Ethereum is $2,700." | `0.9879` | `0.0000` | `+0.9879` | **PASS ✓** | Exact spot price vs near-miss price (>22% deviation) penalized via continuous error curve. |
+| **15** | `What is Dogecoin spot price?` | `$0.10` | "DOGE is trading at $0.10." | "DOGE is unconfirmed and rumored around $0.10 maybe." | `0.9878` | `0.0000` | `+0.9878` | **PASS ✓** | Definitive authoritative spot price vs speculative/hedged uncertain rumor. |
 
 ---
 

@@ -25,6 +25,10 @@ const IDX_LEXICAL:      usize = 2;
 const IDX_LENGTH:       usize = 3;
 const IDX_COMPOSITE:    usize = 4;
 
+// Upper ceiling reserved exclusively for non-identical factual answers.
+// Exact normalized identity alone receives 1.0000.
+const MAX_NON_EXACT_SCORE: f32 = 0.9880;
+
 #[inline]
 unsafe fn read_str<'a>(ptr: i32, len: i32) -> &'a str {
     if ptr <= 0 || len <= 0 {
@@ -54,15 +58,33 @@ fn to_lower_str(s: &str) -> String {
     out
 }
 
-// Strictly monotonic high-separation contrast curve
+// Canonical text normalization for exact self-match detection
+fn is_normalized_identical(gt: &str, cand: &str) -> bool {
+    let gt_t = gt.trim();
+    let cand_t = cand.trim();
+    if gt_t == cand_t {
+        return true;
+    }
+
+    let gt_l = to_lower_str(gt_t);
+    let cand_l = to_lower_str(cand_t);
+    if gt_l == cand_l {
+        return true;
+    }
+
+    let clean_gt: String = gt_l.chars().filter(|c| !c.is_whitespace() && *c != '.' && *c != ',' && *c != '$' && *c != '€' && *c != '£' && *c != '¥' && *c != '₦').collect();
+    let clean_cand: String = cand_l.chars().filter(|c| !c.is_whitespace() && *c != '.' && *c != ',' && *c != '$' && *c != '€' && *c != '£' && *c != '¥' && *c != '₦').collect();
+
+    !clean_gt.is_empty() && clean_gt == clean_cand
+}
+
+// Strictly monotonic high-separation contrast curve for non-exact answers.
+// Guarantees output is strictly bounded in [0.0, MAX_NON_EXACT_SCORE].
 #[inline]
 fn apply_high_separation_curve(raw: f32) -> f32 {
     let x = math::clamp01(raw);
     if x <= 0.02 {
         return 0.0;
-    }
-    if x >= 0.985 {
-        return 1.0;
     }
     let x_pow = powf(x, 2.5);
     let inv_pow = powf(1.0 - x, 2.5);
@@ -70,7 +92,8 @@ fn apply_high_separation_curve(raw: f32) -> f32 {
     if den <= 0.0 {
         0.0
     } else {
-        math::clamp01(x_pow / den)
+        let curved = math::clamp01(x_pow / den);
+        curved * MAX_NON_EXACT_SCORE
     }
 }
 
@@ -138,16 +161,7 @@ unsafe fn signals_from_vecs(
     let stale_mult = numeric::check_stale_and_historical(question, ground_truth, miner_answer);
     let hedge_mult = numeric::check_hedging_and_uncertainty(miner_answer);
 
-    let gt_l = to_lower_str(ground_truth);
-    let ma_l = to_lower_str(miner_answer);
-    let is_exact = gt_l.trim() == ma_l.trim();
-
-    let factual_score = if is_exact {
-        1.0
-    } else {
-        num_mult * entity_mult * currency_mult * polarity_mult * stale_mult * hedge_mult
-    };
-
+    let factual_score = num_mult * entity_mult * currency_mult * polarity_mult * stale_mult * hedge_mult;
     let len_quality = math::sigmoid((miner_answer.len() as f32 - 20.0) / 15.0);
 
     let base_correctness = if factual_score < 0.02 {
@@ -161,7 +175,11 @@ unsafe fn signals_from_vecs(
 }
 
 #[inline]
-fn composite(_relevance: f32, correctness: f32, _lexical: f32, _len_quality: f32) -> f32 {
+fn composite(_relevance: f32, correctness: f32, _lexical: f32, _len_quality: f32, is_identical: bool) -> f32 {
+    if is_identical {
+        return 1.0;
+    }
+
     if correctness <= 0.01 {
         return 0.0;
     }
@@ -183,13 +201,14 @@ pub unsafe extern "C" fn rank_answer(
         return 0.0;
     }
 
-    if ground_truth.trim() == miner_answer.trim() {
+    let is_identical = is_normalized_identical(ground_truth, miner_answer);
+    if is_identical {
         return 1.0;
     }
 
     let (relevance, correctness, lexical, len_quality) =
         compute_signals(question, ground_truth, miner_answer);
-    composite(relevance, correctness, lexical, len_quality)
+    composite(relevance, correctness, lexical, len_quality, false)
 }
 
 #[no_mangle]
@@ -206,7 +225,8 @@ pub unsafe extern "C" fn rank_answer_cached(
         return 0.0;
     }
 
-    if ground_truth.trim() == miner_answer.trim() {
+    let is_identical = is_normalized_identical(ground_truth, miner_answer);
+    if is_identical {
         return 1.0;
     }
 
@@ -219,7 +239,7 @@ pub unsafe extern "C" fn rank_answer_cached(
     let (relevance, correctness, lexical, len_quality) =
         signals_from_vecs(q_vec, gt_vec, "", ground_truth, miner_answer, &ma_vec);
 
-    composite(relevance, correctness, lexical, len_quality)
+    composite(relevance, correctness, lexical, len_quality, false)
 }
 
 #[no_mangle]
@@ -237,13 +257,14 @@ pub unsafe extern "C" fn breakdown_answer(
         return BREAKDOWN_BUF.as_ptr() as i32;
     }
 
+    let is_identical = is_normalized_identical(ground_truth, miner_answer);
     let (relevance, correctness, lexical, len_quality) =
         compute_signals(question, ground_truth, miner_answer);
 
-    let comp = composite(relevance, correctness, lexical, len_quality);
+    let comp = composite(relevance, correctness, lexical, len_quality, is_identical);
 
     BREAKDOWN_BUF[IDX_RELEVANCE]   = relevance;
-    BREAKDOWN_BUF[IDX_CORRECTNESS] = correctness;
+    BREAKDOWN_BUF[IDX_CORRECTNESS] = if is_identical { 1.0 } else { correctness };
     BREAKDOWN_BUF[IDX_LEXICAL]     = lexical;
     BREAKDOWN_BUF[IDX_LENGTH]      = len_quality;
     BREAKDOWN_BUF[IDX_COMPOSITE]   = comp;
