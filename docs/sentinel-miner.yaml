@@ -12,3 +12,36 @@ endpoints:
     external_path: /api/v1/miner/risk-assessment
     method: POST
     description: Live real-time cryptocurrency spot price and market intelligence oracle.
+
+on_chain:
+  description: >-
+    The price answer and the confidence behind it, in the shape a contract can
+    settle on.
+  transform: direct
+  min_price_usdc: 0.01
+  fields:
+    strings:
+      - index: 0
+        name: asset
+        description: The asset the answer is about.
+        source_path: asset
+      - index: 1
+        name: answer
+        description: One-line answer to the question that was asked.
+        source_path: answer
+    integers:
+      - index: 0
+        name: price_usd_x100
+        description: Spot price in USD, multiplied by 100.
+        source_path: price_usd
+        multiplier: 100
+      - index: 1
+        name: confidence_score
+        description: Confidence from 0 to 100, as this miner already reports it.
+        source_path: confidence_score
+  request:
+    - endpoint: api/v1/miner/risk-assessment
+      method: POST
+      content_type: application/json
+      body:
+        asset: { source: strings.0, type: string }
