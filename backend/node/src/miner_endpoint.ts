@@ -9,6 +9,7 @@ interface PriceCache {
 
 const priceCache: Record<string, PriceCache> = {};
 const CACHE_TTL_MS = 60000; // 60s cache
+const UPSTREAM_TIMEOUT_MS = 5000;
 
 const ASSET_ALIASES: Record<string, string> = {
   btc: 'BTC', bitcoin: 'BTC', xbt: 'BTC',
@@ -130,43 +131,118 @@ export function extractAsset(input: unknown): string {
   return 'ETH';
 }
 
-export async function fetchLiveCryptoPrice(symbol: string): Promise<{ price: number; change24h: number } | null> {
+interface LivePriceResult {
+  price: number;
+  change24h: number;
+  source: 'binance' | 'coinbase' | 'kraken' | 'coingecko';
+}
+
+const COINBASE_SYMBOLS: Record<string, string> = {
+  BTC: 'BTC-USD', ETH: 'ETH-USD', SOL: 'SOL-USD', ADA: 'ADA-USD', AVAX: 'AVAX-USD',
+  LINK: 'LINK-USD', DOGE: 'DOGE-USD', XRP: 'XRP-USD', BNB: 'BNB-USD', DOT: 'DOT-USD',
+  MATIC: 'MATIC-USD', ARB: 'ARB-USD', OP: 'OP-USD', UNI: 'UNI-USD', AAVE: 'AAVE-USD',
+  MKR: 'MKR-USD', ATOM: 'ATOM-USD', NEAR: 'NEAR-USD', SUI: 'SUI-USD', PEPE: 'PEPE-USD',
+  SHIB: 'SHIB-USD', LTC: 'LTC-USD', XLM: 'XLM-USD', ALGO: 'ALGO-USD', FIL: 'FIL-USD',
+  ICP: 'ICP-USD', APT: 'APT-USD', INJ: 'INJ-USD', KAS: 'KAS-USD', HBAR: 'HBAR-USD',
+  SEI: 'SEI-USD', WLD: 'WLD-USD', ENA: 'ENA-USD', ONDO: 'ONDO-USD', BONK: 'BONK-USD',
+  FLOKI: 'FLOKI-USD', JUP: 'JUP-USD', PYTH: 'PYTH-USD', COMP: 'COMP-USD', SUSHI: 'SUSHI-USD',
+  USDT: 'USDT-USD', USDC: 'USDC-USD',
+};
+
+const COINGECKO_IDS: Record<string, string> = {
+  BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', AAVE: 'aave', UNI: 'uniswap',
+  ARB: 'arbitrum', OP: 'optimism', LINK: 'chainlink', MATIC: 'matic-network',
+  MKR: 'maker', DOGE: 'dogecoin', XRP: 'ripple', AVAX: 'avalanche-2',
+  BNB: 'binancecoin', USDT: 'tether', USDC: 'usd-coin',
+};
+
+async function fetchFromCoinbase(sym: string): Promise<LivePriceResult | null> {
+  const product = COINBASE_SYMBOLS[sym];
+  if (!product) return null;
+  try {
+    const res = await axios.get(`https://api.coinbase.com/v2/prices/${product}/spot`, { timeout: UPSTREAM_TIMEOUT_MS });
+    const price = Number(res.data?.data?.amount);
+    if (!Number.isFinite(price) || price <= 0) return null;
+    return { price, change24h: 0, source: 'coinbase' };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchFromKraken(sym: string): Promise<LivePriceResult | null> {
+  const pairMap: Record<string, string> = {
+    BTC: 'XBTUSD', ETH: 'ETHUSD', SOL: 'SOLUSD', ADA: 'ADAUSD', AVAX: 'AVAXUSD',
+    LINK: 'LINKUSD', DOGE: 'DOGEUSD', XRP: 'XRPUSD', DOT: 'DOTUSD', LTC: 'LTCUSD',
+    XLM: 'XLMUSD', ATOM: 'ATOMUSD', UNI: 'UNIUSD', AAVE: 'AAVEUSD', USDT: 'USDTUSD',
+    USDC: 'USDCUSD',
+  };
+  const pair = pairMap[sym];
+  if (!pair) return null;
+  try {
+    const res = await axios.get(`https://api.kraken.com/0/public/Ticker?pair=${pair}`, { timeout: UPSTREAM_TIMEOUT_MS });
+    const result = res.data?.result;
+    if (!result) return null;
+    const key = Object.keys(result)[0];
+    const price = Number(result[key]?.c?.[0]);
+    const open = Number(result[key]?.o);
+    const change24h = Number.isFinite(price) && Number.isFinite(open) && open > 0 ? ((price - open) / open) * 100 : 0;
+    if (!Number.isFinite(price) || price <= 0) return null;
+    return { price, change24h, source: 'kraken' };
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchLiveCryptoPrice(symbol: string): Promise<LivePriceResult | null> {
   const sym = symbol.toUpperCase().trim();
   const now = Date.now();
 
   if (priceCache[sym] && now - priceCache[sym].timestamp < CACHE_TTL_MS) {
-    return { price: priceCache[sym].price, change24h: priceCache[sym].change24h };
+    return { price: priceCache[sym].price, change24h: priceCache[sym].change24h, source: 'binance' };
+  }
+
+  // Keep Binance as the primary source. Other independent public sources are
+  // used when Binance is unavailable, rate-limited, or unreachable from Render.
+  try {
+    const binanceSymbol = sym === 'USD' || sym === 'USDT' ? 'USDCUSDT' : `${sym}USDT`;
+    const res = await axios.get(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`, { timeout: UPSTREAM_TIMEOUT_MS });
+    if (res.data && res.data.lastPrice) {
+      const price = Number(res.data.lastPrice);
+      const change24h = Number(res.data.priceChangePercent);
+      if (Number.isFinite(price) && price > 0) {
+        priceCache[sym] = { price, change24h, timestamp: now };
+        return { price, change24h, source: 'binance' };
+      }
+    }
+  } catch {
+    // Continue to independent fallbacks.
+  }
+
+  const coinbase = await fetchFromCoinbase(sym);
+  if (coinbase) {
+    priceCache[sym] = { price: coinbase.price, change24h: coinbase.change24h, timestamp: now };
+    return coinbase;
+  }
+
+  const kraken = await fetchFromKraken(sym);
+  if (kraken) {
+    priceCache[sym] = { price: kraken.price, change24h: kraken.change24h, timestamp: now };
+    return kraken;
   }
 
   try {
-    const binanceSymbol = sym === 'USD' || sym === 'USDT' ? 'USDCUSDT' : `${sym}USDT`;
-    const res = await axios.get(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`, { timeout: 3000 });
-    if (res.data && res.data.lastPrice) {
-      const price = parseFloat(res.data.lastPrice);
-      const change24h = parseFloat(res.data.priceChangePercent);
-      priceCache[sym] = { price, change24h, timestamp: now };
-      return { price, change24h };
+    const geckoId = COINGECKO_IDS[sym] || sym.toLowerCase();
+    const gRes = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${geckoId}&vs_currencies=usd&include_24hr_change=true`, { timeout: UPSTREAM_TIMEOUT_MS });
+    if (gRes.data && gRes.data[geckoId]) {
+      const price = Number(gRes.data[geckoId].usd);
+      const change24h = Number(gRes.data[geckoId].usd_24h_change || 0);
+      if (Number.isFinite(price) && price > 0) {
+        priceCache[sym] = { price, change24h, timestamp: now };
+        return { price, change24h, source: 'coingecko' };
+      }
     }
   } catch {
-    try {
-      const idMap: Record<string, string> = {
-        BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', AAVE: 'aave', UNI: 'uniswap',
-        ARB: 'arbitrum', OP: 'optimism', LINK: 'chainlink', MATIC: 'matic-network',
-        MKR: 'maker', DOGE: 'dogecoin', XRP: 'ripple', AVAX: 'avalanche-2',
-        BNB: 'binancecoin', USDT: 'tether', USDC: 'usd-coin',
-      };
-
-      const geckoId = idMap[sym] || sym.toLowerCase();
-      const gRes = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${geckoId}&vs_currencies=usd&include_24hr_change=true`, { timeout: 3000 });
-      if (gRes.data && gRes.data[geckoId]) {
-        const price = gRes.data[geckoId].usd;
-        const change24h = gRes.data[geckoId].usd_24h_change || 0.0;
-        priceCache[sym] = { price, change24h, timestamp: now };
-        return { price, change24h };
-      }
-    } catch {
-      // Fallback
-    }
+    // All upstreams failed.
   }
 
   return null;
