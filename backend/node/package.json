@@ -8,7 +8,8 @@
     "start": "node dist/server.js",
     "build": "tsc",
     "test": "tsx tests/gateway.test.ts",
-    "test:tvl": "tsx tests/tvl.test.ts"
+    "test:tvl": "tsx tests/tvl.test.ts",
+    "test:web-search": "tsx tests/web_search.test.ts"
   },
   "dependencies": {
     "@types/cors": "^2.8.17",
