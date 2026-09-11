@@ -75,18 +75,12 @@ function normalizeToken(token: string): string {
   return token.toLowerCase().replace(/[^a-z0-9-]/g, '');
 }
 
-/**
- * Telegraph may send a direct `asset`, a ticker, or a natural-language query.
- * Keep the endpoint backward-compatible while extracting the actual asset from
- * phrases such as "What is the current price of Bitcoin?" and "ETH price now".
- */
 export function extractAsset(input: unknown): string {
   const raw = String(input ?? '').trim();
   if (!raw) return 'ETH';
 
   const normalized = raw.toLowerCase().replace(/[?.,!:$]/g, ' ').replace(/\s+/g, ' ').trim();
 
-  // Prefer known multi-word aliases before token scanning.
   const multiword = [
     ['bitcoin cash', 'BCH'],
     ['ethereum classic', 'ETC'],
@@ -99,18 +93,14 @@ export function extractAsset(input: unknown): string {
     if (normalized.includes(phrase)) return ticker;
   }
 
-  // Direct ticker/name input remains the fastest path.
   const direct = normalizeToken(normalized);
   if (ASSET_ALIASES[direct]) return ASSET_ALIASES[direct];
 
-  // Scan the full phrase for known asset names/tickers. This is intentionally
-  // allow-listed so words such as "price" or "current" can never become symbols.
   const tokens = normalized.split(/\s+/).map(normalizeToken).filter(Boolean);
   for (const token of tokens) {
     if (ASSET_ALIASES[token]) return ASSET_ALIASES[token];
   }
 
-  // Handle common slash/quote forms such as BTC/USD or ETH/USDT.
   for (const token of normalized.split(/\s+/)) {
     const parts = token.split('/').map(normalizeToken);
     for (const part of parts) {
@@ -120,8 +110,6 @@ export function extractAsset(input: unknown): string {
     }
   }
 
-  // Last-resort ticker extraction for a short symbol that is not in the alias map.
-  // Never pass the entire natural-language query upstream as a trading symbol.
   for (const token of tokens) {
     if (!STOP_WORDS.has(token) && /^[a-z0-9]{2,10}$/.test(token)) {
       return token.toUpperCase();
@@ -160,10 +148,20 @@ async function fetchFromCoinbase(sym: string): Promise<LivePriceResult | null> {
   const product = COINBASE_SYMBOLS[sym];
   if (!product) return null;
   try {
-    const res = await axios.get(`https://api.coinbase.com/v2/prices/${product}/spot`, { timeout: UPSTREAM_TIMEOUT_MS });
-    const price = Number(res.data?.data?.amount);
+    const [spotRes, statsRes] = await Promise.all([
+      axios.get(`https://api.coinbase.com/v2/prices/${product}/spot`, { timeout: UPSTREAM_TIMEOUT_MS }),
+      axios.get(`https://api.exchange.coinbase.com/products/${product}/stats`, { timeout: UPSTREAM_TIMEOUT_MS }),
+    ]);
+    const price = Number(spotRes.data?.data?.amount);
+    const stats = statsRes.data;
+    const last = Number(stats?.last);
+    const open = Number(stats?.open);
+    const referencePrice = Number.isFinite(last) && last > 0 ? last : price;
+    const change24h = Number.isFinite(referencePrice) && Number.isFinite(open) && open > 0
+      ? ((referencePrice - open) / open) * 100
+      : 0;
     if (!Number.isFinite(price) || price <= 0) return null;
-    return { price, change24h: 0, source: 'coinbase' };
+    return { price, change24h, source: 'coinbase' };
   } catch {
     return null;
   }
@@ -201,8 +199,6 @@ export async function fetchLiveCryptoPrice(symbol: string): Promise<LivePriceRes
     return { price: priceCache[sym].price, change24h: priceCache[sym].change24h, source: 'binance' };
   }
 
-  // Keep Binance as the primary source. Other independent public sources are
-  // used when Binance is unavailable, rate-limited, or unreachable from Render.
   try {
     const binanceSymbol = sym === 'USD' || sym === 'USDT' ? 'USDCUSDT' : `${sym}USDT`;
     const res = await axios.get(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSymbol}`, { timeout: UPSTREAM_TIMEOUT_MS });
@@ -267,9 +263,6 @@ export async function handleMinerRiskAssessment(req: Request, res: Response) {
     return;
   }
 
-  // Keep the primary answer focused on the requested spot price. The 24h change
-  // remains available as structured data without introducing a second number into
-  // the main sentence that can distract a numeric evaluator.
   res.status(200).json({
     status: 'success',
     miner_id: 501,
