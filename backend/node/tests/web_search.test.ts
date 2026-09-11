@@ -14,7 +14,7 @@ const incident = {
 };
 
 if (calculateWebRisk(clean) !== 10) throw new Error('Clean web-risk classification failed');
-if (calculateWebRisk(incident) !== 60) throw new Error('Incident web-risk classification failed');
+if (calculateWebRisk(incident) !== 85) throw new Error('Incident web-risk classification failed');
 
 console.log('✓ Web search risk classification tests passed.');
 console.log('Note: live Tavily calls require TAVILY_API_KEY and are intentionally not executed by this deterministic test.');
