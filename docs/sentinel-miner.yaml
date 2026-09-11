@@ -3,12 +3,27 @@ kind: miner
 id: 501
 slug: sentinel-risk-oracle
 name: Telegraph Sentinel Risk Intelligence
-description: Autonomous pre-flight DeFi risk intelligence and real-time live crypto pricing oracle.
+description: Autonomous pre-flight DeFi risk intelligence with live crypto pricing, protocol TVL, and web intelligence.
 base_url: https://telegraph-sentinel-d68u.onrender.com
 auth:
   type: none
+intents:
+  - CRYPTO_PRICE
+  - TVL_LOOKUP
+  - WEB_SEARCH
 endpoints:
   - path: /api/v1/miner/risk-assessment
     external_path: /api/v1/miner/risk-assessment
     method: POST
-    description: Live real-time cryptocurrency spot price and market intelligence oracle.
+    intent: CRYPTO_PRICE
+    description: Live real-time cryptocurrency price and market intelligence oracle.
+  - path: /api/v1/miner/tvl
+    external_path: /api/v1/miner/tvl
+    method: POST
+    intent: TVL_LOOKUP
+    description: Real-time protocol TVL oracle backed by DefiLlama protocol data.
+  - path: /api/v1/miner/web-search
+    external_path: /api/v1/miner/web-search
+    method: POST
+    intent: WEB_SEARCH
+    description: Real-time web intelligence search backed by Tavily Search API.
