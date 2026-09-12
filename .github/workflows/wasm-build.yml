@@ -1,0 +1,45 @@
+name: WASM Scorer Build
+
+on:
+  push:
+    branches:
+      - wasm-ci-baseline
+  workflow_dispatch:
+
+jobs:
+  build-wasm:
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: wasm/scorer_rust
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Verify scorer intent
+        run: |
+          grep -q 'SCORER_INTENT.*CRYPTO_PRICE' src/lib.rs
+
+      - name: Build WASM scorer
+        run: |
+          cargo build \
+            --release \
+            --target wasm32-unknown-unknown
+
+      - name: Verify WASM artifact
+        run: |
+          test -s target/wasm32-unknown-unknown/release/telegraph_scoring.wasm
+          ls -lh target/wasm32-unknown-unknown/release/telegraph_scoring.wasm
+
+      - name: Upload WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: telegraph-scoring-wasm-baseline
+          path: wasm/scorer_rust/target/wasm32-unknown-unknown/release/telegraph_scoring.wasm
