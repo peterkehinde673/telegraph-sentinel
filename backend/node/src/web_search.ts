@@ -116,7 +116,7 @@ export async function handleMinerWebSearch(req: Request, res: Response) {
 
   const liveData = await searchWeb(query);
   if (!liveData) {
-    res.status(200).json({ status: 'unavailable', miner_id: 501, intent: 'WEB_SEARCH', query, answer: 'Web search data temporarily unavailable from the provider.', confidence_score: 50, source: 'tavily' });
+    res.status(200).json({ status: 'unavailable', miner_id: 501, intent: 'WEB_SEARCH', query, answer: 'Web search data temporarily unavailable from the provider.', confidence_score: 0.5, source: 'tavily' });
     return;
   }
 
@@ -128,8 +128,8 @@ export async function handleMinerWebSearch(req: Request, res: Response) {
     answer: liveData.answer,
     results: liveData.results,
     risk_signal: calculateWebRisk(liveData),
-    confidence_score: liveData.results.length > 0 ? 92 : 75,
     timestamp: liveData.timestamp,
     source: liveData.source,
+    confidence_score: liveData.results.length > 0 ? 0.92 : 0.75,
   });
 }
