@@ -27,19 +27,20 @@ jobs:
         run: |
           grep -q 'SCORER_INTENT.*CRYPTO_PRICE' src/lib.rs
 
-      - name: Build WASM scorer
+      - name: Build real-weights WASM scorer
         run: |
           cargo build \
             --release \
-            --target wasm32-unknown-unknown
+            --target wasm32-unknown-unknown \
+            --features real_weights
 
       - name: Verify WASM artifact
         run: |
           test -s target/wasm32-unknown-unknown/release/telegraph_scoring.wasm
           ls -lh target/wasm32-unknown-unknown/release/telegraph_scoring.wasm
 
-      - name: Upload WASM artifact
+      - name: Upload real-weights WASM artifact
         uses: actions/upload-artifact@v4
         with:
-          name: telegraph-scoring-wasm-baseline
+          name: telegraph-scoring-wasm-real-weights
           path: wasm/scorer_rust/target/wasm32-unknown-unknown/release/telegraph_scoring.wasm
