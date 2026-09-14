@@ -33,6 +33,8 @@ semantics:
     confidence_field: confidence_score
     reason_field: answer
   supported_intents:
+    - CRYPTO_PRICE
+    - TVL_LOOKUP
     - WEB_SEARCH
 
 rate_limit_per_sec: 2
