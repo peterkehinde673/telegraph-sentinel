@@ -206,7 +206,7 @@ export async function handleMinerTvlLookup(req: Request, res: Response) {
       answer: `TVL data temporarily unavailable for ${protocolSlug}.`,
       tvl_usd: null,
       tvl_7d_delta_pct: null,
-      confidence_score: 50.0,
+      confidence_score: 0.5,
       timestamp: new Date().toISOString(),
       source: 'defillama',
     });
@@ -228,7 +228,7 @@ export async function handleMinerTvlLookup(req: Request, res: Response) {
     tvl_usd: liveData.tvl_usd,
     tvl_7d_delta_pct: liveData.tvl_7d_delta_pct,
     risk_signal: riskSignal,
-    confidence_score: 95.0,
+    confidence_score: 0.95,
     timestamp: liveData.timestamp,
     source: liveData.source,
     source_url: liveData.source_url,
