@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
 import axios from 'axios';
+import { Request, Response } from 'express';
 
 interface PriceCache {
   price: number;
@@ -257,7 +257,7 @@ export async function handleMinerRiskAssessment(req: Request, res: Response) {
       asset,
       answer: `${asset} price data temporarily unavailable from upstream sources.`,
       price_usd: null,
-      confidence_score: 50.0,
+      confidence_score: 0.5,
       timestamp: new Date().toISOString(),
     });
     return;
@@ -271,7 +271,7 @@ export async function handleMinerRiskAssessment(req: Request, res: Response) {
     answer: `${asset} is currently trading at $${liveData.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 })} USD.`,
     price_usd: liveData.price,
     change_24h_pct: liveData.change24h,
-    confidence_score: 98.0,
+    confidence_score: 0.98,
     timestamp: new Date().toISOString(),
   });
 }
