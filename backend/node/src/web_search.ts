@@ -51,7 +51,7 @@ export async function searchWeb(queryInput: unknown): Promise<WebSearchResult | 
       TAVILY_API_URL,
       {
         query,
-        search_depth: 'basic',
+        search_depth: 'advanced',
         include_answer: true,
         include_raw_content: false,
         max_results: 5,
