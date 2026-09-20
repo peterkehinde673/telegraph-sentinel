@@ -90,6 +90,28 @@ export async function searchWeb(queryInput: unknown): Promise<WebSearchResult | 
   }
 }
 
+export function calculateWebConfidence(result: WebSearchResult): number {
+  const scores = result.results
+    .map((item) => Number(item.score))
+    .filter((score) => Number.isFinite(score) && score >= 0 && score <= 1);
+
+  if (scores.length === 0) return result.answer ? 0.6 : 0.5;
+
+  const topScore = Math.max(...scores);
+  const averageScore = scores.reduce((sum, score) => sum + score, 0) / scores.length;
+  const strongSources = scores.filter((score) => score >= 0.7).length;
+  const sourceCoverage = Math.min(strongSources / 3, 1);
+
+  const confidence =
+    0.45 +
+    topScore * 0.25 +
+    averageScore * 0.15 +
+    sourceCoverage * 0.1 +
+    (result.answer ? 0.05 : 0);
+
+  return Math.max(0.5, Math.min(0.95, Number(confidence.toFixed(3))));
+}
+
 export function calculateWebRisk(result: WebSearchResult): number {
   const text = `${result.answer} ${result.results.map((item) => `${item.title} ${item.content}`).join(' ')}`.toLowerCase();
   const incidentTerms = ['exploit', 'hacked', 'hack', 'drained', 'drain', 'rug pull', 'rug-pull', 'vulnerability', 'attack', 'compromised', 'breach', 'scam', 'phishing'];
@@ -130,6 +152,6 @@ export async function handleMinerWebSearch(req: Request, res: Response) {
     risk_signal: calculateWebRisk(liveData),
     timestamp: liveData.timestamp,
     source: liveData.source,
-    confidence_score: liveData.results.length > 0 ? 0.92 : 0.75,
+    confidence_score: calculateWebConfidence(liveData),
   });
 }
