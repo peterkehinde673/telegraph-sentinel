@@ -48,6 +48,50 @@ function getSearchTimeRange(query: string): 'day' | 'week' | undefined {
   return undefined;
 }
 
+function getFreshResultScore(text: string): number {
+  const normalized = text.toLowerCase();
+  const now = new Date();
+  const year = now.getUTCFullYear();
+  const month = now.toLocaleString('en-US', { month: 'long', timeZone: 'UTC' }).toLowerCase();
+  const monthShort = now.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }).toLowerCase();
+  const day = now.getUTCDate();
+
+  let score = 0;
+  if (normalized.includes(String(year))) score += 2;
+  if (normalized.includes(month) || normalized.includes(monthShort)) score += 2;
+  if (new RegExp('\\\\b' + day + '\\\\b').test(normalized)) score += 2;
+  if (/\\b(today|hours? ago|hour ago|minutes? ago|minute ago|yesterday|days? ago|day ago)\\b/.test(normalized)) score += 3;
+  if (/\\b(sept|sep)\\.?\\s+\\d{1,2}\\b/.test(normalized)) score += 2;
+
+  return score;
+}
+
+function buildFreshAnswer(
+  results: WebSearchResult['results'],
+  fallbackAnswer: string,
+): string {
+  if (results.length === 0) return fallbackAnswer;
+
+  const candidates = results
+    .map((item) => ({
+      item,
+      freshness: getFreshResultScore(item.content + ' ' + item.title),
+    }))
+    .filter(({ freshness }) => freshness > 0)
+    .sort((a, b) => b.freshness - a.freshness || b.item.score - a.item.score)
+    .slice(0, 2);
+
+  if (candidates.length === 0) return fallbackAnswer;
+
+  const summaries = candidates.map(({ item }) => {
+    const compact = item.content.replace(/\\s+/g, ' ').trim();
+    const sentences = compact.split(/(?<=[.!?])\\s+/).slice(0, 2).join(' ');
+    return `${item.title}: ${sentences.slice(0, 420)}`;
+  });
+
+  return summaries.join(' ');
+}
+
 export async function searchWeb(queryInput: unknown): Promise<WebSearchResult | null> {
   const query = normalizeQuery(queryInput);
   if (!query) return null;
@@ -97,6 +141,10 @@ export async function searchWeb(queryInput: unknown): Promise<WebSearchResult | 
       timestamp: new Date().toISOString(),
       source: 'tavily',
     };
+
+    if (getSearchTimeRange(query)) {
+      result.answer = buildFreshAnswer(results, result.answer);
+    }
 
     searchCache[cacheKey] = { result, cachedAt: now };
     return result;
