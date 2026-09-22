@@ -34,6 +34,20 @@ function normalizeQuery(input: unknown): string {
   return String(input ?? '').replace(/\s+/g, ' ').trim().slice(0, 1000);
 }
 
+function getSearchTimeRange(query: string): 'day' | 'week' | undefined {
+  const normalized = query.toLowerCase();
+
+  if (/\b(today|today's|breaking|just now|right now)\b/.test(normalized)) {
+    return 'day';
+  }
+
+  if (/\b(latest|recent|recently|this week|current|newest|up-to-date|up to date)\b/.test(normalized)) {
+    return 'week';
+  }
+
+  return undefined;
+}
+
 export async function searchWeb(queryInput: unknown): Promise<WebSearchResult | null> {
   const query = normalizeQuery(queryInput);
   if (!query) return null;
@@ -55,6 +69,7 @@ export async function searchWeb(queryInput: unknown): Promise<WebSearchResult | 
         include_answer: true,
         include_raw_content: false,
         max_results: 5,
+        ...(getSearchTimeRange(query) ? { time_range: getSearchTimeRange(query) } : {}),
       },
       {
         timeout: SEARCH_TIMEOUT_MS,
