@@ -59,7 +59,7 @@ function getFreshResultScore(text: string): number {
   let score = 0;
   if (normalized.includes(String(year))) score += 2;
   if (normalized.includes(month) || normalized.includes(monthShort)) score += 2;
-  if (new RegExp('\\\\b' + day + '\\\\b').test(normalized)) score += 2;
+  if (new RegExp('\\b' + day + '\\b').test(normalized)) score += 2;
   if (/\\b(today|hours? ago|hour ago|minutes? ago|minute ago|yesterday|days? ago|day ago)\\b/.test(normalized)) score += 3;
   if (/\\b(sept|sep)\\.?\\s+\\d{1,2}\\b/.test(normalized)) score += 2;
 
