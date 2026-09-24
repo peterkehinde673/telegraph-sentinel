@@ -244,10 +244,29 @@ export async function fetchLiveCryptoPrice(symbol: string): Promise<LivePriceRes
   return null;
 }
 
+function logCryptoEvaluationRequest(
+  req: Request,
+  asset: string,
+  liveData: LivePriceResult | null,
+): void {
+  const question = req.body?.question || req.body?.query || req.query?.question || req.query?.query || null;
+  const rawInput = req.query?.asset || req.body?.asset || req.query?.symbol || req.body?.symbol || req.body?.query || 'ETH';
+
+  console.log('[CRYPTO_PRICE_DIAGNOSTIC]', JSON.stringify({
+    timestamp: new Date().toISOString(),
+    question: typeof question === 'string' ? question.slice(0, 500) : question,
+    raw_input: String(rawInput).slice(0, 200),
+    asset,
+    provider: liveData?.source ?? null,
+    price_usd: liveData?.price ?? null,
+  }));
+}
+
 export async function handleMinerRiskAssessment(req: Request, res: Response) {
   const rawInput = req.query?.asset || req.body?.asset || req.query?.symbol || req.body?.symbol || req.body?.query || 'ETH';
   const asset = extractAsset(rawInput);
   const liveData = await fetchLiveCryptoPrice(asset);
+  logCryptoEvaluationRequest(req, asset, liveData);
 
   if (!liveData) {
     res.status(200).json({
