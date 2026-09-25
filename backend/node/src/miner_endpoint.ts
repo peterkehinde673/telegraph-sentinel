@@ -254,6 +254,10 @@ function logCryptoEvaluationRequest(
 
   console.log('[CRYPTO_PRICE_DIAGNOSTIC]', JSON.stringify({
     timestamp: new Date().toISOString(),
+    path: req.path,
+    method: req.method,
+    query_keys: Object.keys(req.query || {}),
+    body_keys: Object.keys(req.body || {}),
     question: typeof question === 'string' ? question.slice(0, 500) : question,
     raw_input: String(rawInput).slice(0, 200),
     asset,
