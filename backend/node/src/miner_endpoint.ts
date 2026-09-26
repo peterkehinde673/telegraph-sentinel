@@ -267,7 +267,14 @@ function logCryptoEvaluationRequest(
 }
 
 export async function handleMinerRiskAssessment(req: Request, res: Response) {
-  const rawInput = req.query?.asset || req.body?.asset || req.query?.symbol || req.body?.symbol || req.body?.query || 'ETH';
+  const input = req.body?.input;
+  const inputAsset = typeof input === 'string'
+    ? input
+    : input && typeof input === 'object'
+      ? (input.asset || input.symbol || input.query || input.question)
+      : undefined;
+  const rawInput = req.query?.asset || req.body?.asset || req.query?.symbol || req.body?.symbol
+    || req.body?.query || req.body?.question || inputAsset || req.query?.question || req.query?.query || 'ETH';
   const asset = extractAsset(rawInput);
   const liveData = await fetchLiveCryptoPrice(asset);
   logCryptoEvaluationRequest(req, asset, liveData);
