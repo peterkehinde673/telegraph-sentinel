@@ -8,7 +8,7 @@ export interface TelegraphMinerSpec {
   metadata: { id: string; slug: string; name: string; description: string; version: string; author: string; repository: string; };
   network: { supportedChains: string[]; baseUrl: string; x402: { enabled: boolean; facilitatorUrl: string; defaultNetwork: string; pricingModel: string; floorPriceUsd: number; }; };
   intents: string[];
-  endpoints: Array<{ intent: string; path: string; method: 'GET' | 'POST'; description: string; requestParameters: Record<string, any>; responseSchema: Record<string, any>; }>;
+  endpoints: Array<{ intent: string; path: string; method: 'GET' | 'POST'; description: string; requestParameters: Record<string, any>; responseSchema: Record<string, any>; telegraph_direct?: { required_payload_keys: string[] }; }>;
   onchain: { feeRecipient: string; chainIdentifier: string; };
 }
 
@@ -29,19 +29,19 @@ export function generateDefaultSentinelYaml(hostUrl?: string, feeRecipient?: str
       {
         intent: 'CRYPTO_PRICE', path: '/api/v1/miner/risk-assessment', method: 'POST',
         description: 'Live cryptocurrency price and market intelligence oracle with real exchange fallbacks.',
-        requestParameters: { asset: { type: 'string', required: true, example: 'ETH' }, query: { type: 'string', required: false, example: 'What is the price of BTC?' } },
+        requestParameters: { asset: { type: 'string', required: true, example: 'ETH' }, query: { type: 'string', required: false, example: 'What is the price of BTC?' } }, telegraph_direct: { required_payload_keys: ['asset'] },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', asset: 'string', answer: 'string', price_usd: 'number|null', change_24h_pct: 'number|null', confidence_score: 'number' },
       },
       {
         intent: 'TVL_LOOKUP', path: '/api/v1/miner/tvl', method: 'POST',
         description: 'Real-time protocol TVL oracle backed by DefiLlama protocol data.',
-        requestParameters: { protocol: { type: 'string', required: true, example: 'Aave' }, query: { type: 'string', required: false, example: 'What is the TVL of Aave?' } },
+        requestParameters: { protocol: { type: 'string', required: true, example: 'Aave' }, query: { type: 'string', required: false, example: 'What is the TVL of Aave?' } }, telegraph_direct: { required_payload_keys: ['protocol'] },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', protocol: 'string', tvl_usd: 'number|null', tvl_7d_delta_pct: 'number|null', risk_signal: 'number', confidence_score: 'number' },
       },
       {
         intent: 'WEB_SEARCH', path: '/api/v1/miner/web-search', method: 'POST',
         description: 'Real-time web intelligence search backed by Tavily Search API.',
-        requestParameters: { query: { type: 'string', required: true, example: 'Latest security incidents affecting Aave' } },
+        requestParameters: { query: { type: 'string', required: true, example: 'Latest security incidents affecting Aave' } }, telegraph_direct: { required_payload_keys: ['query'] },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', query: 'string', answer: 'string', results: 'array', risk_signal: 'number', confidence_score: 'number' },
       },
     ],
