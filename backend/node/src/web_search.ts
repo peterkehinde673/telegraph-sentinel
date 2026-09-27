@@ -1,8 +1,9 @@
 import axios from 'axios';
 import { Request, Response } from 'express';
 
+const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const TAVILY_API_URL = 'https://api.tavily.com/search';
-const SEARCH_TIMEOUT_MS = 8000;
+const SEARCH_TIMEOUT_MS = 10000;
 const SEARCH_CACHE_TTL_MS = 30000;
 
 export interface WebSearchResult {
@@ -15,7 +16,7 @@ export interface WebSearchResult {
     score: number;
   }>;
   timestamp: string;
-  source: 'tavily';
+  source: 'gemini' | 'tavily';
 }
 
 interface CacheEntry {
@@ -25,9 +26,18 @@ interface CacheEntry {
 
 const searchCache: Record<string, CacheEntry> = {};
 
-function getApiKey(): string | null {
+function getGeminiApiKey(): string | null {
+  const key = process.env.GEMINI_API_KEY?.trim();
+  return key || null;
+}
+
+function getTavilyApiKey(): string | null {
   const key = process.env.TAVILY_API_KEY?.trim();
   return key || null;
+}
+
+function getGeminiModel(): string {
+  return process.env.GEMINI_SEARCH_MODEL?.trim() || 'gemini-2.5-flash';
 }
 
 function normalizeQuery(input: unknown): string {
@@ -59,7 +69,7 @@ function getFreshResultScore(text: string): number {
   let score = 0;
   if (normalized.includes(String(year))) score += 2;
   if (normalized.includes(month) || normalized.includes(monthShort)) score += 2;
-  if (new RegExp('\\b' + day + '\\b').test(normalized)) score += 2;
+  if (new RegExp('\\\\b' + day + '\\\\b').test(normalized)) score += 2;
   if (/\\b(today|hours? ago|hour ago|minutes? ago|minute ago|yesterday|days? ago|day ago)\\b/.test(normalized)) score += 3;
   if (/\\b(sept|sep)\\.?\\s+\\d{1,2}\\b/.test(normalized)) score += 2;
 
@@ -92,19 +102,95 @@ function buildFreshAnswer(
   return summaries.join(' ');
 }
 
-export async function searchWeb(queryInput: unknown): Promise<WebSearchResult | null> {
-  const query = normalizeQuery(queryInput);
-  if (!query) return null;
+function extractGeminiText(data: any): string {
+  const parts = Array.isArray(data?.candidates?.[0]?.content?.parts)
+    ? data.candidates[0].content.parts
+    : [];
+  return parts
+    .map((part: any) => typeof part?.text === 'string' ? part.text : '')
+    .filter(Boolean)
+    .join(' ')
+    .trim();
+}
 
-  const apiKey = getApiKey();
+function extractGeminiSources(data: any, answer: string): WebSearchResult['results'] {
+  const chunks = Array.isArray(data?.candidates?.[0]?.groundingMetadata?.groundingChunks)
+    ? data.candidates[0].groundingMetadata.groundingChunks
+    : [];
+
+  const seen = new Set<string>();
+  const results: WebSearchResult['results'] = [];
+
+  for (const chunk of chunks) {
+    const web = chunk?.web;
+    const url = typeof web?.uri === 'string' ? web.uri : '';
+    if (!url || seen.has(url)) continue;
+
+    seen.add(url);
+    results.push({
+      title: String(web?.title || url).slice(0, 300),
+      url,
+      content: answer.slice(0, 1200),
+      score: 0.9,
+    });
+
+    if (results.length >= 5) break;
+  }
+
+  return results;
+}
+
+async function searchWithGemini(query: string): Promise<WebSearchResult | null> {
+  const apiKey = getGeminiApiKey();
   if (!apiKey) return null;
 
-  const cacheKey = query.toLowerCase();
-  const now = Date.now();
-  const cached = searchCache[cacheKey];
-  if (cached && now - cached.cachedAt < SEARCH_CACHE_TTL_MS) return cached.result;
+  try {
+    const response = await axios.post(
+      `${GEMINI_API_BASE}/${encodeURIComponent(getGeminiModel())}:generateContent`,
+      {
+        contents: [{ role: 'user', parts: [{ text: query }] }],
+        tools: [{ google_search: {} }],
+        generationConfig: {
+          temperature: 0.1,
+        },
+      },
+      {
+        timeout: SEARCH_TIMEOUT_MS,
+        headers: {
+          'x-goog-api-key': apiKey,
+          'Content-Type': 'application/json',
+        },
+      },
+    );
+
+    const data = response.data || {};
+    const answer = extractGeminiText(data);
+    if (!answer) return null;
+
+    const results = extractGeminiSources(data, answer);
+
+    return {
+      query,
+      answer,
+      results,
+      timestamp: new Date().toISOString(),
+      source: 'gemini',
+    };
+  } catch (error: any) {
+    console.warn('[WEB_SEARCH_GEMINI_FALLBACK]', JSON.stringify({
+      status: error?.response?.status ?? null,
+      message: String(error?.message || 'Gemini request failed').slice(0, 200),
+    }));
+    return null;
+  }
+}
+
+async function searchWithTavily(query: string): Promise<WebSearchResult | null> {
+  const apiKey = getTavilyApiKey();
+  if (!apiKey) return null;
 
   try {
+    const timeRange = getSearchTimeRange(query);
     const response = await axios.post(
       TAVILY_API_URL,
       {
@@ -113,7 +199,7 @@ export async function searchWeb(queryInput: unknown): Promise<WebSearchResult | 
         include_answer: true,
         include_raw_content: false,
         max_results: 5,
-        ...(getSearchTimeRange(query) ? { time_range: getSearchTimeRange(query) } : {}),
+        ...(timeRange ? { time_range: timeRange } : {}),
       },
       {
         timeout: SEARCH_TIMEOUT_MS,
@@ -142,15 +228,32 @@ export async function searchWeb(queryInput: unknown): Promise<WebSearchResult | 
       source: 'tavily',
     };
 
-    if (getSearchTimeRange(query)) {
+    if (timeRange) {
       result.answer = buildFreshAnswer(results, result.answer);
     }
 
-    searchCache[cacheKey] = { result, cachedAt: now };
     return result;
   } catch {
     return null;
   }
+}
+
+export async function searchWeb(queryInput: unknown): Promise<WebSearchResult | null> {
+  const query = normalizeQuery(queryInput);
+  if (!query) return null;
+
+  const cacheKey = query.toLowerCase();
+  const now = Date.now();
+  const cached = searchCache[cacheKey];
+  if (cached && now - cached.cachedAt < SEARCH_CACHE_TTL_MS) return cached.result;
+
+  // Gemini + Google Search is the primary WEB_SEARCH provider.
+  // Tavily remains an availability fallback; TVL and CRYPTO_PRICE are untouched.
+  const result = await searchWithGemini(query) || await searchWithTavily(query);
+  if (!result) return null;
+
+  searchCache[cacheKey] = { result, cachedAt: now };
+  return result;
 }
 
 export function calculateWebConfidence(result: WebSearchResult): number {
@@ -194,14 +297,14 @@ export async function handleMinerWebSearch(req: Request, res: Response) {
     return;
   }
 
-  if (!getApiKey()) {
-    res.status(503).json({ status: 'unavailable', miner_id: 501, intent: 'WEB_SEARCH', query, answer: 'Web search provider is not configured.', confidence_score: 0, source: 'tavily' });
+  if (!getGeminiApiKey() && !getTavilyApiKey()) {
+    res.status(503).json({ status: 'unavailable', miner_id: 501, intent: 'WEB_SEARCH', query, answer: 'Web search provider is not configured.', confidence_score: 0, source: 'none' });
     return;
   }
 
   const liveData = await searchWeb(query);
   if (!liveData) {
-    res.status(200).json({ status: 'unavailable', miner_id: 501, intent: 'WEB_SEARCH', query, answer: 'Web search data temporarily unavailable from the provider.', confidence_score: 0.5, source: 'tavily' });
+    res.status(200).json({ status: 'unavailable', miner_id: 501, intent: 'WEB_SEARCH', query, answer: 'Web search data temporarily unavailable from the providers.', confidence_score: 0.5, source: 'none' });
     return;
   }
 
