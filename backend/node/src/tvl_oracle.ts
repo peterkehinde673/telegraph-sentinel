@@ -3,7 +3,8 @@ import { Request, Response } from 'express';
 
 const TVL_API_BASE = 'https://api.llama.fi';
 const TVL_TIMEOUT_MS = 8000;
-const TVL_CACHE_TTL_MS = 60000;
+const TVL_CURRENT_TIMEOUT_MS = 6000;
+const TVL_CACHE_TTL_MS = 15000;
 
 interface TvlPoint {
   date: number;
@@ -151,32 +152,41 @@ export async function fetchProtocolTvl(protocolInput: unknown): Promise<TvlResul
   }
 
   try {
-    const url = `${TVL_API_BASE}/protocol/${encodeURIComponent(slug)}`;
-    const response = await axios.get(url, { timeout: TVL_TIMEOUT_MS });
-    const data = response.data;
-    const points: TvlPoint[] = Array.isArray(data?.tvl)
-      ? data.tvl.map((point: any) => ({
+    const currentUrl = `${TVL_API_BASE}/tvl/${encodeURIComponent(slug)}`;
+    const historyUrl = `${TVL_API_BASE}/protocol/${encodeURIComponent(slug)}`;
+
+    // Use DefiLlama's dedicated current-TVL endpoint for the value we report.
+    // Keep the historical protocol endpoint only for the 7-day comparison.
+    const [currentResponse, historyResponse] = await Promise.all([
+      axios.get(currentUrl, { timeout: TVL_CURRENT_TIMEOUT_MS }),
+      axios.get(historyUrl, { timeout: TVL_TIMEOUT_MS }),
+    ]);
+
+    const currentValue = Number(currentResponse.data);
+    const historyData = historyResponse.data;
+    const points: TvlPoint[] = Array.isArray(historyData?.tvl)
+      ? historyData.tvl.map((point: any) => ({
           date: Number(point?.date),
           totalLiquidityUSD: Number(point?.totalLiquidityUSD),
         }))
       : [];
 
     const latest = latestTvlPoint(points);
-    if (!latest) return null;
+    if (!Number.isFinite(currentValue) || currentValue < 0 || !latest) return null;
 
     const reference = findSevenDayReference(points, latest);
     const delta7d = reference && reference.totalLiquidityUSD > 0
-      ? ((latest.totalLiquidityUSD - reference.totalLiquidityUSD) / reference.totalLiquidityUSD) * 100
+      ? ((currentValue - reference.totalLiquidityUSD) / reference.totalLiquidityUSD) * 100
       : null;
 
     const result: TvlResult = {
-      protocol: String(data?.name || slug),
+      protocol: String(historyData?.name || slug),
       protocol_slug: slug,
-      tvl_usd: latest.totalLiquidityUSD,
+      tvl_usd: currentValue,
       tvl_7d_delta_pct: Number.isFinite(delta7d) ? delta7d : null,
-      timestamp: new Date(latest.date * 1000).toISOString(),
+      timestamp: new Date().toISOString(),
       source: 'defillama',
-      source_url: url,
+      source_url: currentUrl,
     };
 
     tvlCache[slug] = { result, cachedAt: now };
