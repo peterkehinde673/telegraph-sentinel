@@ -4,7 +4,7 @@ import { Request, Response } from 'express';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta/models';
 const TAVILY_API_URL = 'https://api.tavily.com/search';
 const SEARCH_TIMEOUT_MS = 10000;
-const SEARCH_CACHE_TTL_MS = 30000;
+const SEARCH_CACHE_TTL_MS = 5000;
 
 export interface WebSearchResult {
   query: string;
@@ -114,30 +114,35 @@ function extractGeminiText(data: any): string {
 }
 
 function extractGeminiSources(data: any, answer: string): WebSearchResult['results'] {
-  const chunks = Array.isArray(data?.candidates?.[0]?.groundingMetadata?.groundingChunks)
-    ? data.candidates[0].groundingMetadata.groundingChunks
-    : [];
+  const metadata = data?.candidates?.[0]?.groundingMetadata;
+  const chunks = Array.isArray(metadata?.groundingChunks) ? metadata.groundingChunks : [];
+  const supports = Array.isArray(metadata?.groundingSupports) ? metadata.groundingSupports : [];
+  const supportedChunkIndexes = new Set<number>();
+
+  for (const support of supports) {
+    for (const index of Array.isArray(support?.groundingChunkIndices) ? support.groundingChunkIndices : []) {
+      if (Number.isInteger(index)) supportedChunkIndexes.add(index);
+    }
+  }
 
   const seen = new Set<string>();
   const results: WebSearchResult['results'] = [];
 
-  for (const chunk of chunks) {
+  chunks.forEach((chunk: any, index: number) => {
     const web = chunk?.web;
     const url = typeof web?.uri === 'string' ? web.uri : '';
-    if (!url || seen.has(url)) continue;
+    if (!url || seen.has(url)) return;
 
     seen.add(url);
     results.push({
       title: String(web?.title || url).slice(0, 300),
       url,
       content: answer.slice(0, 1200),
-      score: 0.9,
+      score: supportedChunkIndexes.has(index) ? 1 : 0.75,
     });
+  });
 
-    if (results.length >= 5) break;
-  }
-
-  return results;
+  return results.slice(0, 5);
 }
 
 async function searchWithGemini(query: string): Promise<WebSearchResult | null> {
@@ -148,7 +153,20 @@ async function searchWithGemini(query: string): Promise<WebSearchResult | null> 
     const response = await axios.post(
       `${GEMINI_API_BASE}/${encodeURIComponent(getGeminiModel())}:generateContent`,
       {
-        contents: [{ role: 'user', parts: [{ text: query }] }],
+        contents: [{
+          role: 'user',
+          parts: [{
+            text: [
+              'Answer the user query as a concise factual web-search result.',
+              'Use Google Search grounding and prefer authoritative or primary sources.',
+              'For latest/current/recent questions, prioritize the newest relevant evidence and include the concrete date when useful.',
+              'State exact numbers, names, and dates when the sources support them.',
+              'Do not speculate or invent missing facts. Keep the final answer to at most 3 concise sentences.',
+              '',
+              `User query: ${query}`,
+            ].join('\\n'),
+          }],
+        }],
         tools: [{ google_search: {} }],
         generationConfig: {
           temperature: 0.1,
