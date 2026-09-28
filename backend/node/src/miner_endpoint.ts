@@ -4,11 +4,12 @@ import { Request, Response } from 'express';
 interface PriceCache {
   price: number;
   change24h: number;
+  source: LivePriceResult['source'];
   timestamp: number;
 }
 
 const priceCache: Record<string, PriceCache> = {};
-const CACHE_TTL_MS = 60000; // 60s cache
+const CACHE_TTL_MS = 15000; // Keep benchmark answers fresh while avoiding repeated upstream calls
 const UPSTREAM_TIMEOUT_MS = 5000;
 
 const ASSET_ALIASES: Record<string, string> = {
@@ -142,6 +143,14 @@ const COINGECKO_IDS: Record<string, string> = {
   ARB: 'arbitrum', OP: 'optimism', LINK: 'chainlink', MATIC: 'matic-network',
   MKR: 'maker', DOGE: 'dogecoin', XRP: 'ripple', AVAX: 'avalanche-2',
   BNB: 'binancecoin', USDT: 'tether', USDC: 'usd-coin',
+  ADA: 'cardano', DOT: 'polkadot', SOL: 'solana', AVAX: 'avalanche-2', XRP: 'ripple',
+  LTC: 'litecoin', XLM: 'stellar', ALGO: 'algorand', FIL: 'filecoin', ICP: 'internet-computer',
+  APT: 'aptos', INJ: 'injective-protocol', KAS: 'kaspa', HBAR: 'hedera-hashgraph',
+  SEI: 'sei-network', WLD: 'worldcoin-wld', ENA: 'ethena', ONDO: 'ondo-finance',
+  BONK: 'bonk', FLOKI: 'floki', JUP: 'jupiter-exchange-solana', PYTH: 'pyth-network',
+  COMP: 'compound-governance-token', SUSHI: 'sushi', PEPE: 'pepe', SHIB: 'shiba-inu',
+  NEAR: 'near', TON: 'the-open-network', TRX: 'tron', RUNE: 'thorchain', STRK: 'starknet',
+  TIA: 'celestia', FTM: 'fantom', VET: 'vechain', ATOM: 'cosmos', SUI: 'sui', PENDLE: 'pendle',
 };
 
 async function fetchFromCoinbase(sym: string): Promise<LivePriceResult | null> {
@@ -196,7 +205,7 @@ export async function fetchLiveCryptoPrice(symbol: string): Promise<LivePriceRes
   const now = Date.now();
 
   if (priceCache[sym] && now - priceCache[sym].timestamp < CACHE_TTL_MS) {
-    return { price: priceCache[sym].price, change24h: priceCache[sym].change24h, source: 'binance' };
+    return { price: priceCache[sym].price, change24h: priceCache[sym].change24h, source: priceCache[sym].source };
   }
 
   try {
@@ -263,6 +272,7 @@ function logCryptoEvaluationRequest(
     asset,
     provider: liveData?.source ?? null,
     price_usd: liveData?.price ?? null,
+    change_24h_pct: liveData?.change24h ?? null,
   }));
 }
 
@@ -302,6 +312,7 @@ export async function handleMinerRiskAssessment(req: Request, res: Response) {
     price_usd: liveData.price,
     change_24h_pct: liveData.change24h,
     confidence_score: 0.98,
+    source: liveData.source,
     timestamp: new Date().toISOString(),
   });
 }
