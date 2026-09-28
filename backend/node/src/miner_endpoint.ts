@@ -143,7 +143,6 @@ const COINGECKO_IDS: Record<string, string> = {
   ARB: 'arbitrum', OP: 'optimism', LINK: 'chainlink', MATIC: 'matic-network',
   MKR: 'maker', DOGE: 'dogecoin', XRP: 'ripple', AVAX: 'avalanche-2',
   BNB: 'binancecoin', USDT: 'tether', USDC: 'usd-coin',
-  ADA: 'cardano', DOT: 'polkadot', SOL: 'solana', AVAX: 'avalanche-2', XRP: 'ripple',
   LTC: 'litecoin', XLM: 'stellar', ALGO: 'algorand', FIL: 'filecoin', ICP: 'internet-computer',
   APT: 'aptos', INJ: 'injective-protocol', KAS: 'kaspa', HBAR: 'hedera-hashgraph',
   SEI: 'sei-network', WLD: 'worldcoin-wld', ENA: 'ethena', ONDO: 'ondo-finance',
@@ -215,7 +214,7 @@ export async function fetchLiveCryptoPrice(symbol: string): Promise<LivePriceRes
       const price = Number(res.data.lastPrice);
       const change24h = Number(res.data.priceChangePercent);
       if (Number.isFinite(price) && price > 0) {
-        priceCache[sym] = { price, change24h, timestamp: now };
+        priceCache[sym] = { price, change24h, source: 'binance', timestamp: now };
         return { price, change24h, source: 'binance' };
       }
     }
@@ -225,13 +224,13 @@ export async function fetchLiveCryptoPrice(symbol: string): Promise<LivePriceRes
 
   const coinbase = await fetchFromCoinbase(sym);
   if (coinbase) {
-    priceCache[sym] = { price: coinbase.price, change24h: coinbase.change24h, timestamp: now };
+    priceCache[sym] = { price: coinbase.price, change24h: coinbase.change24h, source: 'coinbase', timestamp: now };
     return coinbase;
   }
 
   const kraken = await fetchFromKraken(sym);
   if (kraken) {
-    priceCache[sym] = { price: kraken.price, change24h: kraken.change24h, timestamp: now };
+    priceCache[sym] = { price: kraken.price, change24h: kraken.change24h, source: 'kraken', timestamp: now };
     return kraken;
   }
 
@@ -242,7 +241,7 @@ export async function fetchLiveCryptoPrice(symbol: string): Promise<LivePriceRes
       const price = Number(gRes.data[geckoId].usd);
       const change24h = Number(gRes.data[geckoId].usd_24h_change || 0);
       if (Number.isFinite(price) && price > 0) {
-        priceCache[sym] = { price, change24h, timestamp: now };
+        priceCache[sym] = { price, change24h, source: 'coingecko', timestamp: now };
         return { price, change24h, source: 'coingecko' };
       }
     }
