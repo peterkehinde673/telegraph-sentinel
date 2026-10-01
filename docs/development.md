@@ -1,17 +1,20 @@
 # Development Guide
 
-## Repository layout
+## Project layout
 
-- `backend/node` — Node.js / Express gateway, Telegraph API routes, dashboard assets, and WebSocket layer.
-- `backend/python` — Python / FastAPI risk-analysis service.
-- `wasm` — WASM scorer source/build and local validation tooling.
-- `docs` — project documentation and integration artifacts.
+- `backend/node` — production Node.js / Express gateway, miner endpoints, Telegraph integration, and dashboard assets.
+- `backend/python` — FastAPI risk-analysis engine and SQLite persistence helpers.
+- `frontend` — standalone frontend package used by the repository's frontend workflow.
+- `src` — root application/dashboard source retained for the root build.
+- `wasm` — deterministic scorer source, validation tooling, and protocol artifact workflow.
+- `docs` — operational, architecture, integration, and scorer documentation.
+- `fixtures` — deterministic local test data.
 
-## Local prerequisites
+## Runtime versions
 
-Use the runtime versions appropriate to the checked-in project environment. The previously validated development environment used Node.js/npm and Python with a virtual environment, plus SQLite.
+The production Docker image and CI use **Node.js 20**. Python development uses **Python 3.12** in CI. Match those versions when reproducing production behavior locally.
 
-## Running the gateway locally
+## Node gateway
 
 ```bash
 cd backend/node
@@ -20,11 +23,55 @@ npm run build
 npm start
 ```
 
-The local gateway normally listens on `http://localhost:4000`.
+The gateway normally listens on `http://localhost:4000`.
 
-## Running the Python service
+For development with automatic TypeScript reloads:
 
-From the repository root, activate the Python environment and run the FastAPI application according to the project's environment configuration. The service is intended to be consumed by the Node gateway rather than exposed directly as the public dashboard.
+```bash
+npm run dev
+```
+
+## Python risk engine
+
+```bash
+cd backend/python
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+The Python service is intended to support the Node gateway rather than serve the public dashboard directly.
+
+## Testing
+
+The CI workflow runs the Node build, provider-focused TVL and web-search suites, and the Python risk-engine test suite.
+
+Run the Node provider suites locally with:
+
+```bash
+cd backend/node
+npm run build
+npm run test:tvl
+npm run test:web-search
+```
+
+The gateway/integration suites in `backend/node/tests/` expect a gateway to be running on `http://127.0.0.1:4000`:
+
+```bash
+npm start
+# in another terminal:
+node --import tsx tests/gateway.test.ts
+node --import tsx tests/miner.test.ts
+node --import tsx tests/track1.test.ts
+```
+
+Run the Python suite with:
+
+```bash
+cd backend/python
+python tests/run_tests.py
+```
 
 ## WASM validation
 
@@ -34,19 +81,18 @@ From the repository root:
 node wasm/validate_scorer.js
 ```
 
-The validator checks the locally built scorer and its deterministic ranking behavior. Local validation cannot reproduce Telegraph's hidden benchmark/evaluation set.
+The validator checks the local scorer artifact and deterministic ranking behavior. It does not reproduce Telegraph's hidden benchmark.
 
-## Testing
+## Configuration
 
-For the Node gateway:
+Copy `.env.example` to a local environment file and provide only the credentials required for the services you are running. Never commit real credentials, wallet keys, API tokens, or production environment files.
 
-```bash
-cd backend/node
-npm test
-```
+## Scoring-sensitive changes
 
-Build before deployment:
+The registered intents are:
 
-```bash
-npm run build
-```
+- `CRYPTO_PRICE`
+- `TVL_LOOKUP`
+- `WEB_SEARCH`
+
+When investigating scoring changes, isolate one variable at a time, compare multiple epochs, and preserve the existing protocol artifacts unless there is evidence that they need to change.
