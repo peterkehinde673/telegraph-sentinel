@@ -1,32 +1,49 @@
-# Environment secrets
+# Environment and secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
 
-# Databases & logs
+# Databases and runtime logs
 *.db
+*.sqlite
+*.sqlite3
 sentinel.db
 logs/
 *.log
 
-# Dependencies
+# Dependencies and virtual environments
 node_modules/
 backend/node/node_modules/
 frontend/node_modules/
 venv/
+.venv/
 __pycache__/
-*.pyc
+*.py[cod]
 
-# Rust build artifacts
+# Build outputs and caches
+backend/node/dist/
+frontend/dist/
+dist/
+.pytest_cache/
+.coverage
+coverage/
+.cache/
+.tmp/
+
+# Rust / WASM build outputs
 wasm/scorer_rust/target/
 target/
 
-# Build outputs & caches
-backend/node/dist/
-frontend/dist/
-.pytest_cache/
-.coverage
+# OS / editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*.log
 
-# Explicitly track and preserve WASM distribution artifacts
+# Local tooling
+*.swp
+*.swo
+
+# Intentionally tracked protocol artifacts
 !wasm/dist/*.wasm
 !docs/*.wasm
