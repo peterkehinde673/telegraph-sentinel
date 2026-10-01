@@ -17,16 +17,25 @@ endpoints:
     external_path: /api/v1/miner/risk-assessment
     method: POST
     description: Live cryptocurrency price and market intelligence endpoint.
+    telegraph_direct:
+      required_payload_keys:
+        - asset
 
   - path: /api/v1/miner/tvl
     external_path: /api/v1/miner/tvl
     method: POST
     description: Real-time protocol TVL intelligence backed by DefiLlama data.
+    telegraph_direct:
+      required_payload_keys:
+        - protocol
 
   - path: /api/v1/miner/web-search
     external_path: /api/v1/miner/web-search
     method: POST
     description: Real-time web intelligence search backed by Tavily Search API.
+    telegraph_direct:
+      required_payload_keys:
+        - query
 
 semantics:
   signal_mapping:
