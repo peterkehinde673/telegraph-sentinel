@@ -32,6 +32,8 @@ async function runFallbackTests() {
   const previousTavilyKey = process.env.TAVILY_API_KEY;
   const previousModel = process.env.GEMINI_SEARCH_MODEL;
   const calls: string[] = [];
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
 
   process.env.GEMINI_API_KEY = 'test-gemini-key';
   process.env.TAVILY_API_KEY = 'test-tavily-key';
@@ -39,7 +41,11 @@ async function runFallbackTests() {
   (axios as any).post = async (url: string) => {
     calls.push(url);
     if (url.includes('generativelanguage.googleapis.com')) {
-      throw { response: { status: 404 }, message: 'Request failed with status code 404' };
+      throw {
+        response: { status: 404, data: { error: { message: 'Model gemini-2.5-flash not found' } } },
+        message: 'Request failed with status code 404',
+        config: { headers: { 'x-goog-api-key': 'test-gemini-key' } },
+      };
     }
     return {
       data: {
@@ -49,12 +55,21 @@ async function runFallbackTests() {
     };
   };
 
+  console.warn = (...args: any[]) => { warnings.push(args.map(String).join(' ')); };
+
   try {
     const fallback = await searchWeb('fallback regression query 1');
     if (fallback?.source !== 'tavily' || calls.length !== 2
       || !calls[0].includes('/v1beta/models/gemini-2.5-flash:generateContent')
       || calls[1] !== 'https://api.tavily.com/search') {
       throw new Error('Tavily must be attempted and returned after Gemini fails with HTTP 404');
+    }
+    const diagnostic = warnings.join(' ');
+    if (!diagnostic.includes('gemini-2.5-flash') || !diagnostic.includes('Model gemini-2.5-flash not found')) {
+      throw new Error('Gemini diagnostics must include the configured model and provider error message');
+    }
+    if (diagnostic.includes('test-gemini-key') || diagnostic.includes('x-goog-api-key')) {
+      throw new Error('Gemini diagnostics must not expose API keys or request headers');
     }
 
     (axios as any).post = async () => {
@@ -64,6 +79,7 @@ async function runFallbackTests() {
     if (unavailable !== null) throw new Error('WEB_SEARCH must return unavailable when both providers fail');
   } finally {
     (axios as any).post = originalPost;
+    console.warn = originalWarn;
     if (previousGeminiKey === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = previousGeminiKey;
     if (previousTavilyKey === undefined) delete process.env.TAVILY_API_KEY;
