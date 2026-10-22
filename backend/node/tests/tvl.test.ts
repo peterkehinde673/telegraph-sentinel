@@ -1,7 +1,14 @@
 import axios from 'axios';
 import { calculateTvlRisk, extractProtocol, fetchProtocolTvl, handleMinerTvlLookup } from '../src/tvl_oracle';
+import { generateDefaultSentinelYaml } from '../src/telegraph/yaml';
 
 async function runHandlerTests() {
+  const tvlResponseSchema = generateDefaultSentinelYaml().endpoints
+    .find((endpoint) => endpoint.intent === 'TVL_LOOKUP')?.responseSchema;
+  if (tvlResponseSchema?.risk_signal !== 'number|null') {
+    throw new Error('TVL response schema must allow a missing risk estimate');
+  }
+
   const originalGet = axios.get;
   const now = Math.floor(Date.now() / 1000);
   const history = {
