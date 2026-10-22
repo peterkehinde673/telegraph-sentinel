@@ -36,11 +36,11 @@ export function generateDefaultSentinelYaml(hostUrl?: string, feeRecipient?: str
         intent: 'TVL_LOOKUP', path: '/api/v1/miner/tvl', method: 'POST',
         description: 'Real-time protocol TVL oracle backed by DefiLlama protocol data.',
         requestParameters: { protocol: { type: 'string', required: true, example: 'Aave' }, query: { type: 'string', required: false, example: 'What is the TVL of Aave?' } }, telegraph_direct: { required_payload_keys: ['protocol'] },
-        responseSchema: { status: 'string', miner_id: 'number', intent: 'string', protocol: 'string', tvl_usd: 'number|null', tvl_7d_delta_pct: 'number|null', risk_signal: 'number', confidence_score: 'number' },
+        responseSchema: { status: 'string', miner_id: 'number', intent: 'string', protocol: 'string', tvl_usd: 'number|null', tvl_7d_delta_pct: 'number|null', risk_signal: 'number|null', confidence_score: 'number' },
       },
       {
         intent: 'WEB_SEARCH', path: '/api/v1/miner/web-search', method: 'POST',
-        description: 'Real-time web intelligence search backed by Tavily Search API.',
+        description: 'Real-time web intelligence search backed by Gemini Google Search grounding with Tavily as a fallback.',
         requestParameters: { query: { type: 'string', required: true, example: 'Latest security incidents affecting Aave' } }, telegraph_direct: { required_payload_keys: ['query'] },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', query: 'string', answer: 'string', results: 'array', risk_signal: 'number', confidence_score: 'number' },
       },

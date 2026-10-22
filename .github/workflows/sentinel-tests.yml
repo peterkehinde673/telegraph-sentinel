@@ -96,3 +96,25 @@ jobs:
 
       - name: Run Python tests
         run: python tests/run_tests.py
+
+  sentinel-ci:
+    name: Sentinel CI
+    if: always()
+    needs:
+      - node-gateway
+      - root-application
+      - frontend
+      - python-risk-engine
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all CI jobs to pass
+        env:
+          NODE_GATEWAY_RESULT: ${{ needs.node-gateway.result }}
+          ROOT_APPLICATION_RESULT: ${{ needs.root-application.result }}
+          FRONTEND_RESULT: ${{ needs.frontend.result }}
+          PYTHON_RISK_ENGINE_RESULT: ${{ needs.python-risk-engine.result }}
+        run: |
+          test "$NODE_GATEWAY_RESULT" = "success"
+          test "$ROOT_APPLICATION_RESULT" = "success"
+          test "$FRONTEND_RESULT" = "success"
+          test "$PYTHON_RISK_ENGINE_RESULT" = "success"

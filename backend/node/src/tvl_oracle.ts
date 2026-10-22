@@ -162,7 +162,11 @@ export async function fetchProtocolTvl(protocolInput: unknown): Promise<TvlResul
       axios.get(historyUrl, { timeout: TVL_TIMEOUT_MS }),
     ]);
 
-    const currentValue = Number(currentResponse.data);
+    const rawCurrentValue = currentResponse.data;
+    const currentValue = rawCurrentValue == null
+      || (typeof rawCurrentValue === 'string' && rawCurrentValue.trim() === '')
+      ? Number.NaN
+      : Number(rawCurrentValue);
     const historyData = historyResponse.data;
     const points: TvlPoint[] = Array.isArray(historyData?.tvl)
       ? historyData.tvl.map((point: any) => ({
@@ -208,17 +212,18 @@ export async function handleMinerTvlLookup(req: Request, res: Response) {
   const liveData = await fetchProtocolTvl(protocolSlug);
 
   if (!liveData) {
-    res.status(200).json({
-      status: 'success',
+    res.status(503).json({
+      status: 'unavailable',
       miner_id: 501,
       intent: 'TVL_LOOKUP',
       protocol: protocolSlug,
       answer: `TVL data temporarily unavailable for ${protocolSlug}.`,
       tvl_usd: null,
       tvl_7d_delta_pct: null,
-      confidence_score: 0.5,
+      risk_signal: null,
+      confidence_score: 0,
       timestamp: new Date().toISOString(),
-      source: 'defillama',
+      source: 'none',
     });
     return;
   }
