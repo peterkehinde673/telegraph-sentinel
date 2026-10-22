@@ -33,15 +33,17 @@ async function runHandlerTests() {
       if (response.body.protocol_slug !== expectedSlug) throw new Error('TVL payload resolved the wrong protocol');
     }
 
-    (axios as any).get = async (url: string) => ({
-      data: url.includes('/tvl/') ? null : history,
-    });
-    const unavailable = createResponse();
-    await handleMinerTvlLookup({ query: {}, body: { protocol: 'NoDataProtocol' } } as any, unavailable as any);
-    if (unavailable.statusCode !== 503 || unavailable.body.status !== 'unavailable'
-      || unavailable.body.tvl_usd !== null || unavailable.body.confidence_score !== 0
-      || unavailable.body.source !== 'none') {
-      throw new Error('Missing TVL data must be reported as unavailable, without a success confidence');
+    for (const [index, missingValue] of [null, ''].entries()) {
+      (axios as any).get = async (url: string) => ({
+        data: url.includes('/tvl/') ? missingValue : history,
+      });
+      const unavailable = createResponse();
+      await handleMinerTvlLookup({ query: {}, body: { protocol: `NoDataProtocol${index}` } } as any, unavailable as any);
+      if (unavailable.statusCode !== 503 || unavailable.body.status !== 'unavailable'
+        || unavailable.body.tvl_usd !== null || unavailable.body.confidence_score !== 0
+        || unavailable.body.source !== 'none') {
+        throw new Error('Missing TVL data must be reported as unavailable, without a success confidence');
+      }
     }
   } finally {
     (axios as any).get = originalGet;

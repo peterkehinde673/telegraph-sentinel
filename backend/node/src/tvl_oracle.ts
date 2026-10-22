@@ -162,7 +162,11 @@ export async function fetchProtocolTvl(protocolInput: unknown): Promise<TvlResul
       axios.get(historyUrl, { timeout: TVL_TIMEOUT_MS }),
     ]);
 
-    const currentValue = Number(currentResponse.data);
+    const rawCurrentValue = currentResponse.data;
+    const currentValue = rawCurrentValue == null
+      || (typeof rawCurrentValue === 'string' && rawCurrentValue.trim() === '')
+      ? Number.NaN
+      : Number(rawCurrentValue);
     const historyData = historyResponse.data;
     const points: TvlPoint[] = Array.isArray(historyData?.tvl)
       ? historyData.tvl.map((point: any) => ({
