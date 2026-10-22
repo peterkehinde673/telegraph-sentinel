@@ -195,9 +195,21 @@ async function searchWithGemini(query: string): Promise<WebSearchResult | null> 
       source: 'gemini',
     };
   } catch (error: any) {
+    // Log only allowlisted diagnostic fields; never serialize request config, headers, or the full error.
+    const providerMessage = error?.response?.data?.error?.message
+      ?? error?.response?.data?.message
+      ?? error?.message
+      ?? 'Gemini request failed';
+    const safeMessage = String(providerMessage)
+      .replace(/[\\u0000-\\u001f\\u007f]/g, ' ')
+      .replace(/AIza[0-9A-Za-z_-]{20,}/g, '[REDACTED_API_KEY]')
+      .replace(/Bearer\\s+\\S+/gi, 'Bearer [REDACTED]')
+      .replace(/(api[_-]?key\\s*[:=]\\s*)[^\\s,;]+/gi, '$1[REDACTED]')
+      .slice(0, 300);
     console.warn('[WEB_SEARCH_GEMINI_FALLBACK]', JSON.stringify({
+      model: getGeminiModel().slice(0, 100),
       status: error?.response?.status ?? null,
-      message: String(error?.message || 'Gemini request failed').slice(0, 200),
+      providerMessage: safeMessage,
     }));
     return null;
   }
