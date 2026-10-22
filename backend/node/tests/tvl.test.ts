@@ -1,5 +1,54 @@
 import axios from 'axios';
-import { calculateTvlRisk, extractProtocol, fetchProtocolTvl } from '../src/tvl_oracle';
+import { calculateTvlRisk, extractProtocol, fetchProtocolTvl, handleMinerTvlLookup } from '../src/tvl_oracle';
+
+async function runHandlerTests() {
+  const originalGet = axios.get;
+  const now = Math.floor(Date.now() / 1000);
+  const history = {
+    name: 'Test Protocol',
+    tvl: [
+      { date: now - 7 * 24 * 60 * 60, totalLiquidityUSD: 900_000 },
+      { date: now, totalLiquidityUSD: 1_000_000 },
+    ],
+  };
+
+  try {
+    (axios as any).get = async (url: string) => ({
+      data: url.includes('/tvl/') ? 1_000_000 : history,
+    });
+    for (const body of [{ protocol: 'Aave' }, { query: 'What is the TVL of Uniswap?' }]) {
+      const response = createResponse();
+      await handleMinerTvlLookup({ query: {}, body } as any, response as any);
+      if (response.statusCode !== 200 || response.body.status !== 'success' || response.body.tvl_usd !== 1_000_000) {
+        throw new Error(`TVL payload lookup failed for ${JSON.stringify(body)}`);
+      }
+      const expectedSlug = 'protocol' in body ? 'aave' : 'uniswap';
+      if (response.body.protocol_slug !== expectedSlug) throw new Error('TVL payload resolved the wrong protocol');
+    }
+
+    (axios as any).get = async (url: string) => ({
+      data: url.includes('/tvl/') ? null : history,
+    });
+    const unavailable = createResponse();
+    await handleMinerTvlLookup({ query: {}, body: { protocol: 'NoDataProtocol' } } as any, unavailable as any);
+    if (unavailable.statusCode !== 503 || unavailable.body.status !== 'unavailable'
+      || unavailable.body.tvl_usd !== null || unavailable.body.confidence_score !== 0
+      || unavailable.body.source !== 'none') {
+      throw new Error('Missing TVL data must be reported as unavailable, without a success confidence');
+    }
+  } finally {
+    (axios as any).get = originalGet;
+  }
+}
+
+function createResponse() {
+  return {
+    statusCode: 200,
+    body: undefined as any,
+    status(code: number) { this.statusCode = code; return this; },
+    json(body: any) { this.body = body; return this; },
+  };
+}
 
 async function runTvlTests() {
   console.log('\n--- Running TVL Oracle Tests ---');
@@ -27,6 +76,9 @@ async function runTvlTests() {
   if (calculateTvlRisk(100_000_000, -5) !== 35) throw new Error('Moderate TVL drawdown risk failed');
   if (calculateTvlRisk(100_000_000, 5) !== 15) throw new Error('Stable/growing TVL risk failed');
   console.log('   ✓ Deterministic TVL risk thresholds passed.');
+
+  await runHandlerTests();
+  console.log('   ✓ Direct, query payload, and unavailable TVL handler cases passed.');
 
   console.log('3. Querying live DefiLlama data for Aave...');
   const result = await fetchProtocolTvl('Aave');
