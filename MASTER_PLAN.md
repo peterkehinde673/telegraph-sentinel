@@ -16,7 +16,7 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 | Phase | Description | Status | Evidence / Summary |
 |---|---|---|---|
 | **Phase 1** | Baseline audit | **COMPLETE** | Full repo, CI, production endpoint audit, and protocol devnode catalog queries completed; baseline facts documented. Commit `eb34c77`, PR #24 passed all 5 CI checks. |
-| **Phase 2** | Canonical intent research | **COMPLETE** | Analyzed all 134 intents across 1,922 miners; documented competition metrics; shortlisted `FRAUD_RISK` and `CRYPTO_YIELD_RATE`. |
+| **Phase 2** | Canonical intent research | **COMPLETE** | Analyzed 134 intents across 1,922 miners; documented competition metrics; shortlisted `FRAUD_RISK` and `CRYPTO_YIELD_RATE`. Commit `1cd2d9a`, PR #25 passed all 5 CI checks. |
 | **Phase 3** | Adapt the reference miner YAML | **NOT STARTED** | Adapt schema and semantic structure from reference Groq miner YAML while preserving Sentinel identity and endpoints. |
 | **Phase 4** | Improve the original three intents | **NOT STARTED** | Enhance `CRYPTO_PRICE`, `TVL_LOOKUP`, and `WEB_SEARCH` handlers, schemas, error fallbacks, and test coverage. |
 | **Phase 5** | Implement additional verified intents | **NOT STARTED** | Implement and test verified low-competition canonical intents supported by Phase 2 research. |
