@@ -15,7 +15,7 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 
 | Phase | Description | Status | Evidence / Summary |
 |---|---|---|---|
-| **Phase 1** | Baseline audit | **COMPLETE** | Full repo, CI, production endpoint audit, and protocol devnode catalog queries completed; baseline facts documented. |
+| **Phase 1** | Baseline audit | **COMPLETE** | Full repo, CI, production endpoint audit, and protocol devnode catalog queries completed; baseline facts documented. Commit `eb34c77`, PR #24 passed all 5 CI checks. |
 | **Phase 2** | Canonical intent research | **NOT STARTED** | Research official Telegraph catalog across 1,922 miners and live intent evaluators for high-value/low-competition opportunities. |
 | **Phase 3** | Adapt the reference miner YAML | **NOT STARTED** | Adapt schema and semantic structure from reference Groq miner YAML while preserving Sentinel identity and endpoints. |
 | **Phase 4** | Improve the original three intents | **NOT STARTED** | Enhance `CRYPTO_PRICE`, `TVL_LOOKUP`, and `WEB_SEARCH` handlers, schemas, error fallbacks, and test coverage. |
@@ -42,9 +42,12 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 
 #### Confirmed Facts
 1. **Git State & Push Authorization:**
-   - Active branch: `main` (tracked to `origin/main`).
+   - Active branch: `feat/frozen-master-plan-phase-1` (branched from `main`).
    - Remote repository: `https://github.com/peterkehinde673/telegraph-sentinel.git`.
-   - Push authentication: Verified via `git push --dry-run origin main` (Exit code 0, write access confirmed).
+   - Initial commit: `eb34c775854a31adcdbc5025ca6d5288715743b2` pushed to GitHub.
+   - Pull request created: [PR #24](https://github.com/peterkehinde673/telegraph-sentinel/pull/24).
+   - CI status: 5/5 jobs passed on GitHub Actions (`Frontend package`, `Node gateway`, `Python risk engine`, `Root application`, `Sentinel CI`).
+   - Branch protection policy: `main` branch ruleset `24290161` enforces PR-only workflows with 1 external approval (`require_last_push_approval: true`, `current_user_can_bypass: "never"`).
    - Recent history: Pull request #23 merged (`b1d091b`), aggregate Sentinel CI check added (`4137688`), Gemini provider error sanitization (`768229a`, `941fbaa`, `1999d5a`), and TVL alignment (`af2f9acc`, `8c9ffcb9`).
 2. **Production Deployment & Correct URL:**
    - Production URL confirmed: `https://telegraph-sentinel-d68u.onrender.com` (HTTP 200 OK), matching the checked-in `docs/sentinel-miner.yaml`, `README.md`, and `public/engine-subnets/sentinel-risk-oracle.yaml`.
