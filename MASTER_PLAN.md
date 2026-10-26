@@ -16,7 +16,7 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 | Phase | Description | Status | Evidence / Summary |
 |---|---|---|---|
 | **Phase 1** | Baseline audit | **COMPLETE** | Full repo, CI, production endpoint audit, and protocol devnode catalog queries completed; baseline facts documented. Commit `eb34c77`, PR #24 passed all 5 CI checks. |
-| **Phase 2** | Canonical intent research | **NOT STARTED** | Research official Telegraph catalog across 1,922 miners and live intent evaluators for high-value/low-competition opportunities. |
+| **Phase 2** | Canonical intent research | **COMPLETE** | Analyzed all 134 intents across 1,922 miners; documented competition metrics; shortlisted `FRAUD_RISK` and `CRYPTO_YIELD_RATE`. |
 | **Phase 3** | Adapt the reference miner YAML | **NOT STARTED** | Adapt schema and semantic structure from reference Groq miner YAML while preserving Sentinel identity and endpoints. |
 | **Phase 4** | Improve the original three intents | **NOT STARTED** | Enhance `CRYPTO_PRICE`, `TVL_LOOKUP`, and `WEB_SEARCH` handlers, schemas, error fallbacks, and test coverage. |
 | **Phase 5** | Implement additional verified intents | **NOT STARTED** | Implement and test verified low-competition canonical intents supported by Phase 2 research. |
@@ -95,7 +95,7 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 ---
 
 ### Phase 2 — Canonical intent research
-- **Status:** `NOT STARTED`
+- **Status:** `COMPLETE`
 - **Objectives:**
   - Verify valid Telegraph Protocol intents using current official documentation or the protocol's actual canonical-intent API.
   - Investigate miner counts for each candidate intent across the 1,922 registered miners.
@@ -103,6 +103,32 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
   - Investigate compatibility with this repository's existing architecture.
   - Identify plausible low-competition opportunities based on evidence.
   - Selection rationale must avoid assuming guaranteed #1 rank without proof.
+
+#### Confirmed Research Findings
+1. **Catalog Scope & Total Intents:**
+   - 1,922 miners queried from the live protocol devnode (`https://devnode.telegraphprotocol.com/api/miners`).
+   - 134 distinct canonical intents are registered across the network.
+   - Comprehensive documentation recorded in [`docs/CANONICAL_INTENT_RESEARCH.md`](docs/CANONICAL_INTENT_RESEARCH.md).
+2. **Current Intents Competitive Evaluation (Epoch 442):**
+   - `CRYPTO_PRICE`: 56 miners (High competition). Sentinel Rank 8, Score 4.04896e-38. Evaluators penalize missing root schemas and expect `label_field: "answer"`.
+   - `TVL_LOOKUP`: 20 miners (Moderate competition). Sentinel Rank 6, Score 0.004088. Top miner `finwire-tvl` (0.1278) uses explicit root JSON schemas, `summary`, and protocol/chain query aliases.
+   - `WEB_SEARCH`: 26 miners (Moderate competition). 15 scored in Epoch 441, top miner `web-hn-algolia` (0.9999). Sentinel unscored due to missing root schema declaration and lack of `GET /query` parameter extraction.
+3. **Shortlist of Verified Low-Competition Opportunities:**
+   - **`FRAUD_RISK`** (12 miners, 100% active evaluation in Epoch 442):
+     - Top score: 0.54115 (`chainsight-oracle`).
+     - Expected outputs: `verdict` (`"High fraud risk"`, `"Elevated fraud risk"`, `"Low fraud risk"`, `"Insufficient information"`), `summary`, `confidence`.
+     - Direct architectural fit with Sentinel's existing Python FastAPI risk engine and SQLite watch-rules system.
+   - **`CRYPTO_YIELD_RATE`** (22 miners, 100% active evaluation in Epoch 442):
+     - Top score: 0.54415 (`yld-lido`).
+     - Expected outputs: `apy_bps`, `apr`, `summary`, `confidence`.
+     - Direct architectural fit with Sentinel's existing DefiLlama integration via the public, free, keyless DefiLlama Yields API (`https://yields.llama.fi/pools`).
+   - **`WALLET_BALANCE_CHECK`** (21 miners, 100% active evaluation in Epoch 442):
+     - Top score: 1.0000 (`chainsight-oracle`).
+     - Native on-chain Base/EVM RPC query via `provider.getBalance(address)`.
+4. **Explicit Selection Rationale:**
+   - Maintain and optimize the existing 3 intents (`CRYPTO_PRICE`, `TVL_LOOKUP`, `WEB_SEARCH`) by declaring explicit root JSON Schemas and dual `GET`/`POST` query support.
+   - Expand into **`FRAUD_RISK`** as the primary new intent due to lowest competition (12 miners) and 100% domain alignment with Sentinel's pre-flight DeFi risk intelligence architecture.
+   - Expand into **`CRYPTO_YIELD_RATE`** as the secondary new intent, leveraging existing DefiLlama infrastructure.
 
 ---
 
