@@ -13,6 +13,8 @@ import { TELEGRAPH_REGISTRY_CONFIG, validateRegistrationParams, encodeRegistrati
 import { handleMinerRiskAssessment, fetchLiveCryptoPrice } from './miner_endpoint';
 import { handleMinerTvlLookup } from './tvl_oracle';
 import { handleMinerWebSearch } from './web_search';
+import { handleMinerFraudRisk } from './fraud_risk';
+import { handleMinerYieldRate } from './yield_oracle';
 
 const app = express();
 const server = http.createServer(app);
@@ -29,6 +31,8 @@ startWatchScheduler();
 app.all('/api/v1/miner/risk-assessment', handleMinerRiskAssessment);
 app.all('/api/v1/miner/tvl', handleMinerTvlLookup);
 app.all('/api/v1/miner/web-search', handleMinerWebSearch);
+app.all('/api/v1/miner/fraud-risk', handleMinerFraudRisk);
+app.all('/api/v1/miner/yield', handleMinerYieldRate);
 
 app.get('/api/v1/miner/spec.yaml', (req: Request, res: Response) => {
   const host = `${req.protocol}://${req.get('host')}`;
