@@ -1,0 +1,285 @@
+version: "1"
+kind: miner
+id: 501
+slug: sentinel-risk-oracle
+protocol: generic
+name: Telegraph Sentinel Risk Intelligence
+description: Autonomous pre-flight DeFi risk intelligence with live crypto pricing, protocol TVL, and real-time web intelligence.
+base_url: https://telegraph-sentinel-d68u.onrender.com
+
+docs:
+  repository: https://github.com/peterkehinde673/telegraph-sentinel
+  website: https://telegraph-sentinel-d68u.onrender.com
+
+auth:
+  type: none
+
+rate_limit_per_sec: 5
+cache_ttl_sec: 15
+circuit_threshold: 5
+circuit_cooldown_seconds: 30
+
+endpoints:
+  - path: /api/v1/miner/risk-assessment
+    external_path: /api/v1/miner/risk-assessment
+    method: POST
+    description: Live cryptocurrency price and market intelligence endpoint with multi-exchange fallbacks.
+    telegraph_direct:
+      required_payload_keys:
+        - asset
+
+  - path: /api/v1/miner/tvl
+    external_path: /api/v1/miner/tvl
+    method: POST
+    description: Real-time protocol TVL intelligence backed by DefiLlama protocol and chain data.
+    telegraph_direct:
+      required_payload_keys:
+        - protocol
+
+  - path: /api/v1/miner/web-search
+    external_path: /api/v1/miner/web-search
+    method: POST
+    description: Real-time web intelligence search backed by Gemini grounding and Tavily Search fallback.
+    telegraph_direct:
+      required_payload_keys:
+        - query
+
+  - path: /api/v1/miner/fraud-risk
+    external_path: /api/v1/miner/fraud-risk
+    method: POST
+    description: Pre-flight fraud and drainer risk analysis engine evaluating addresses, transactions, and attack signatures.
+    telegraph_direct:
+      required_payload_keys:
+        - query
+
+  - path: /api/v1/miner/yield
+    external_path: /api/v1/miner/yield
+    method: POST
+    description: Real-time DeFi pool yield oracle reporting APY, basis points, and TVL across major protocols.
+    telegraph_direct:
+      required_payload_keys:
+        - pool
+
+input_schema:
+  type: object
+  properties:
+    asset:
+      type: string
+      description: Cryptocurrency ticker or symbol (e.g. BTC, ETH, SOL).
+    symbol:
+      type: string
+      description: Trading symbol or market pair alias (e.g. BTCUSDT, ETH-USD).
+    pair:
+      type: string
+      description: Market pair alias (e.g. BTC/USD, ETH/USDT).
+    ticker:
+      type: string
+      description: Asset ticker alias (e.g. BTC, ETH).
+    protocol:
+      type: string
+      description: DeFi protocol slug or name (e.g. aave, uniswap, lido).
+    chain:
+      type: string
+      description: Blockchain network name for chain TVL (e.g. ethereum, base, arbitrum).
+    query:
+      type: string
+      description: Search query or natural-language intelligence question.
+    question:
+      type: string
+      description: Verbatim natural-language question from Telegraph evaluators.
+    q:
+      type: string
+      description: Search query parameter alias.
+    address:
+      type: string
+      description: EVM or blockchain address for fraud risk evaluation (e.g. 0x...).
+    pool:
+      type: string
+      description: DeFi yield pool identifier or token symbol (e.g. stETH, USDC).
+    venue:
+      type: string
+      description: Protocol or venue name for yield lookups (e.g. lido, aave-v3).
+    description:
+      type: string
+      description: Narrative context or transaction description for fraud risk.
+    tx:
+      type: string
+      description: Transaction hash or identifier.
+  required: []
+
+output_schema:
+  type: object
+  properties:
+    status:
+      type: string
+      description: Status of the response (success, unavailable, error).
+    miner_id:
+      type: integer
+      description: Registered Telegraph miner identifier (501).
+    intent:
+      type: string
+      description: Canonical intent evaluated (CRYPTO_PRICE, TVL_LOOKUP, WEB_SEARCH).
+    answer:
+      type: string
+      description: Human-readable authoritative answer string.
+    summary:
+      type: string
+      description: Concise summary alias for scoring evaluators.
+    kind:
+      type: string
+      description: Entity kind for TVL queries (protocol or chain).
+    chain:
+      type: string
+      description: Chain name for chain-level TVL queries.
+    chain_id:
+      type:
+        - integer
+        - "null"
+      description: EVM chain ID when applicable.
+    confidence:
+      type: number
+      description: Calibrated confidence score between 0.0 and 1.0.
+    confidence_score:
+      type: number
+      description: Backward-compatible confidence score field.
+    price_usd:
+      type:
+        - number
+        - "null"
+      description: Spot price in USD for CRYPTO_PRICE queries.
+    change_24h_pct:
+      type:
+        - number
+        - "null"
+      description: 24-hour price change percentage.
+    protocol:
+      type: string
+      description: Protocol name for TVL queries.
+    protocol_slug:
+      type: string
+      description: Protocol slug for TVL queries.
+    tvl_usd:
+      type:
+        - number
+        - "null"
+      description: Total value locked in USD.
+    tvl_7d_delta_pct:
+      type:
+        - number
+        - "null"
+      description: 7-day TVL percentage change.
+    results:
+      type: array
+      description: Web search intelligence results.
+      items:
+        type: object
+        properties:
+          title:
+            type: string
+          url:
+            type: string
+          content:
+            type: string
+          score:
+            type: number
+    hits:
+      type: array
+      description: Web search hits alias for evaluator compatibility.
+      items:
+        type: object
+        properties:
+          title:
+            type: string
+          url:
+            type: string
+          content:
+            type: string
+          score:
+            type: number
+    risk_signal:
+      type:
+        - number
+        - "null"
+      description: Calculated risk score (0-100).
+    verdict:
+      type: string
+      description: Fraud risk classification verdict (High/Elevated/Low fraud risk).
+    risk_score:
+      type:
+        - number
+        - "null"
+      description: Fraud or security risk score (0-100).
+    risk_factors:
+      type: array
+      description: Specific risk factors or indicators detected.
+      items:
+        type: string
+    pool:
+      type: string
+      description: DeFi yield pool identifier or token symbol.
+    venue:
+      type: string
+      description: DeFi yield protocol or venue.
+    apy:
+      type:
+        - number
+        - "null"
+      description: Annual percentage yield.
+    apy_bps:
+      type:
+        - integer
+        - "null"
+      description: Annual percentage yield in basis points.
+    apr:
+      type:
+        - number
+        - "null"
+      description: Annual percentage rate.
+    source:
+      type: string
+      description: Authoritative data source provider.
+    as_of:
+      type: string
+      description: ISO 8601 timestamp representing data freshness.
+    timestamp:
+      type: string
+      description: ISO 8601 timestamp of response generation.
+  required:
+    - status
+    - answer
+    - confidence_score
+
+semantics:
+  signal_mapping:
+    confidence_field: confidence_score
+    label_field: answer
+    reason_field: answer
+  supported_intents:
+    - CRYPTO_PRICE
+    - TVL_LOOKUP
+    - WEB_SEARCH
+    - FRAUD_RISK
+    - CRYPTO_YIELD_RATE
+
+on_chain:
+  description: Autonomous DeFi risk intelligence and multi-oracle evaluation signals.
+  transform: direct
+  min_price_usdc: 0.01
+  fields:
+    strings:
+      - index: 0
+        name: answer
+        description: Primary oracle and intelligence response text
+        source_path: answer
+    integers:
+      - index: 0
+        name: confidence_x10000
+        description: Confidence scaled to integer
+        source_path: confidence_score
+        multiplier: 10000
+  request:
+    - endpoint: /api/v1/miner/risk-assessment
+      method: POST
+      body:
+        asset: { source: strings.0, optional: true }
+        query: { source: strings.0, optional: true }

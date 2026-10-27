@@ -17,6 +17,7 @@ import { handleMinerFraudRisk } from './fraud_risk';
 import { handleMinerYieldRate } from './yield_oracle';
 
 const app = express();
+app.set('trust proxy', 1);
 const server = http.createServer(app);
 
 app.use(cors());
@@ -27,6 +28,24 @@ app.use(express.static(path.join(__dirname, '../public')));
 wsServer.init(server);
 startWatchScheduler();
 
+// Static Telegraph Miner Manifest Serving
+app.get(['/sentinel-miner.yaml', '/miner.yaml'], (_req: Request, res: Response) => {
+  const publicPath = path.join(__dirname, '../public/sentinel-miner.yaml');
+  if (fs.existsSync(publicPath)) {
+    res.setHeader('Content-Type', 'text/yaml; charset=utf-8');
+    return res.sendFile(publicPath);
+  }
+  const rootDocPath = path.resolve(__dirname, '../../../docs/sentinel-miner.yaml');
+  if (fs.existsSync(rootDocPath)) {
+    res.setHeader('Content-Type', 'text/yaml; charset=utf-8');
+    return res.sendFile(rootDocPath);
+  }
+  const proto = _req.get('x-forwarded-proto') || _req.protocol;
+  const host = `${proto}://${_req.get('host')}`;
+  res.setHeader('Content-Type', 'text/yaml; charset=utf-8');
+  return res.send(serializeToYaml(generateDefaultSentinelYaml(host)));
+});
+
 // Telegraph Miner Endpoints
 app.all('/api/v1/miner/risk-assessment', handleMinerRiskAssessment);
 app.all('/api/v1/miner/tvl', handleMinerTvlLookup);
@@ -35,8 +54,19 @@ app.all('/api/v1/miner/fraud-risk', handleMinerFraudRisk);
 app.all('/api/v1/miner/yield', handleMinerYieldRate);
 
 app.get('/api/v1/miner/spec.yaml', (req: Request, res: Response) => {
-  const host = `${req.protocol}://${req.get('host')}`;
-  res.setHeader('Content-Type', 'text/yaml');
+  const publicPath = path.join(__dirname, '../public/sentinel-miner.yaml');
+  if (fs.existsSync(publicPath)) {
+    res.setHeader('Content-Type', 'text/yaml; charset=utf-8');
+    return res.sendFile(publicPath);
+  }
+  const rootDocPath = path.resolve(__dirname, '../../../docs/sentinel-miner.yaml');
+  if (fs.existsSync(rootDocPath)) {
+    res.setHeader('Content-Type', 'text/yaml; charset=utf-8');
+    return res.sendFile(rootDocPath);
+  }
+  const proto = req.get('x-forwarded-proto') || req.protocol;
+  const host = `${proto}://${req.get('host')}`;
+  res.setHeader('Content-Type', 'text/yaml; charset=utf-8');
   res.send(serializeToYaml(generateDefaultSentinelYaml(host)));
 });
 
