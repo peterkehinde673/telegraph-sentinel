@@ -37,6 +37,9 @@ jobs:
       - name: Web-search tests
         run: npm run test:web-search
 
+      - name: Miner YAML validation
+        run: npm run test:yaml
+
   root-application:
     name: Root application
     runs-on: ubuntu-latest

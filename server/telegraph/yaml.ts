@@ -134,10 +134,20 @@ export function parseAndValidateYaml(rawYaml: string): { valid: boolean; spec?: 
   }
 
   if (parsed.kind !== 'miner') errors.push("Missing or invalid 'kind' field (must be 'miner')");
-  if (!parsed.metadata?.name) errors.push("Missing 'metadata.name'");
-  if (!parsed.metadata?.slug) errors.push("Missing 'metadata.slug'");
-  if (!Array.isArray(parsed.intents) || parsed.intents.length === 0) errors.push("Field 'intents' must be a non-empty list of strings");
-  if (!parsed.network?.baseUrl) errors.push("Missing 'network.baseUrl'");
+
+  const name = parsed.metadata?.name || parsed.name;
+  if (!name) errors.push("Missing 'metadata.name' or 'name'");
+
+  const slug = parsed.metadata?.slug || parsed.slug;
+  if (!slug) errors.push("Missing 'metadata.slug' or 'slug'");
+
+  const intents = parsed.intents || parsed.semantics?.supported_intents;
+  if (!Array.isArray(intents) || intents.length === 0) {
+    errors.push("Field 'intents' or 'semantics.supported_intents' must be a non-empty list of strings");
+  }
+
+  const baseUrl = parsed.network?.baseUrl || parsed.base_url;
+  if (!baseUrl) errors.push("Missing 'network.baseUrl' or 'base_url'");
 
   // Deterministic normalized serialization for consistent hashing
   const normalizedStr = typeof parsed === 'object' ? JSON.stringify(parsed, Object.keys(parsed).sort()) : rawYaml;
