@@ -319,8 +319,22 @@ export function calculateWebRisk(result: WebSearchResult): number {
 }
 
 export async function handleMinerWebSearch(req: Request, res: Response) {
-  const rawQuery = req.query?.query || req.body?.query || req.query?.q || req.body?.q || req.body?.asset;
+  const input = req.body?.input;
+  const inputQuery = typeof input === 'string'
+    ? input
+    : input && typeof input === 'object'
+      ? (input.query || input.question || input.q || input.search)
+      : undefined;
+
+  const rawQuery = req.query?.query || req.body?.query
+    || req.query?.q || req.body?.q
+    || req.query?.question || req.body?.question
+    || req.query?.search || req.body?.search
+    || req.query?.asset || req.body?.asset
+    || inputQuery;
+
   const query = normalizeQuery(rawQuery);
+  const nowIso = new Date().toISOString();
 
   if (!query) {
     res.status(400).json({ status: 'error', miner_id: 501, intent: 'WEB_SEARCH', error: 'A search query is required.' });
@@ -328,15 +342,47 @@ export async function handleMinerWebSearch(req: Request, res: Response) {
   }
 
   if (!getGeminiApiKey() && !getTavilyApiKey()) {
-    res.status(503).json({ status: 'unavailable', miner_id: 501, intent: 'WEB_SEARCH', query, answer: 'Web search provider is not configured.', confidence_score: 0, source: 'none' });
+    const unconfAnswer = 'Web search provider is not configured.';
+    res.status(503).json({
+      status: 'unavailable',
+      miner_id: 501,
+      intent: 'WEB_SEARCH',
+      query,
+      answer: unconfAnswer,
+      summary: unconfAnswer,
+      results: [],
+      hits: [],
+      confidence: 0.0,
+      confidence_score: 0.0,
+      source: 'none',
+      as_of: nowIso,
+      timestamp: nowIso,
+    });
     return;
   }
 
   const liveData = await searchWeb(query);
   if (!liveData) {
-    res.status(200).json({ status: 'unavailable', miner_id: 501, intent: 'WEB_SEARCH', query, answer: 'Web search data temporarily unavailable from the providers.', confidence_score: 0.5, source: 'none' });
+    const unavAnswer = 'Web search data temporarily unavailable from the providers.';
+    res.status(200).json({
+      status: 'unavailable',
+      miner_id: 501,
+      intent: 'WEB_SEARCH',
+      query,
+      answer: unavAnswer,
+      summary: unavAnswer,
+      results: [],
+      hits: [],
+      confidence: 0.0,
+      confidence_score: 0.0,
+      source: 'none',
+      as_of: nowIso,
+      timestamp: nowIso,
+    });
     return;
   }
+
+  const confidence = calculateWebConfidence(liveData);
 
   res.status(200).json({
     status: 'success',
@@ -344,10 +390,14 @@ export async function handleMinerWebSearch(req: Request, res: Response) {
     intent: 'WEB_SEARCH',
     query: liveData.query,
     answer: liveData.answer,
+    summary: liveData.answer,
     results: liveData.results,
+    hits: liveData.results,
     risk_signal: calculateWebRisk(liveData),
-    timestamp: liveData.timestamp,
+    confidence,
+    confidence_score: confidence,
     source: liveData.source,
-    confidence_score: calculateWebConfidence(liveData),
+    as_of: liveData.timestamp,
+    timestamp: liveData.timestamp,
   });
 }

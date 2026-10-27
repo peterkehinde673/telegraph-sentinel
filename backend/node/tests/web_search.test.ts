@@ -1,6 +1,5 @@
 import axios from 'axios';
-import { calculateWebRisk } from '../src/web_search';
-import { searchWeb } from '../src/web_search';
+import { calculateWebRisk, handleMinerWebSearch, searchWeb } from '../src/web_search';
 import { generateDefaultSentinelYaml } from '../src/telegraph/yaml';
 
 const webSearchSpec = generateDefaultSentinelYaml().endpoints
@@ -89,9 +88,54 @@ async function runFallbackTests() {
   }
 }
 
+function createResponse() {
+  return {
+    statusCode: 200,
+    body: undefined as any,
+    status(code: number) { this.statusCode = code; return this; },
+    json(body: any) { this.body = body; return this; },
+  };
+}
+
+async function runHandlerAliasTests() {
+  const previousGeminiKey = process.env.GEMINI_API_KEY;
+  const previousTavilyKey = process.env.TAVILY_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.TAVILY_API_KEY;
+
+  try {
+    for (const reqMock of [
+      { query: { q: 'crypto news' } },
+      { body: { query: 'crypto news' } },
+      { body: { input: { question: 'crypto news' } } },
+      { query: { search: 'crypto news' } },
+    ]) {
+      const res = createResponse();
+      await handleMinerWebSearch(reqMock as any, res as any);
+      if (res.statusCode !== 503 || res.body.status !== 'unavailable') {
+        throw new Error(`Unconfigured web search must return HTTP 503 unavailable for ${JSON.stringify(reqMock)}`);
+      }
+      if (!Array.isArray(res.body.hits) || !Array.isArray(res.body.results)) {
+        throw new Error('Both hits and results arrays must be present in response');
+      }
+      if (res.body.confidence !== 0.0 || res.body.confidence_score !== 0.0) {
+        throw new Error('Unavailable search must report 0.0 confidence');
+      }
+      if (!res.body.summary || res.body.summary !== res.body.answer) {
+        throw new Error('summary and answer must match');
+      }
+    }
+  } finally {
+    if (previousGeminiKey !== undefined) process.env.GEMINI_API_KEY = previousGeminiKey;
+    if (previousTavilyKey !== undefined) process.env.TAVILY_API_KEY = previousTavilyKey;
+  }
+}
+
 console.log('✓ Web search risk classification tests passed.');
-runFallbackTests().then(() => {
+runFallbackTests().then(async () => {
   console.log('✓ Gemini 404 → Tavily fallback and dual-provider failure tests passed.');
+  await runHandlerAliasTests();
+  console.log('✓ Web search express handler query/body/input aliases, hits, and summary verified.');
 }).catch((error) => {
   console.error('✗ Web search fallback test failed:', error.message);
   process.exit(1);

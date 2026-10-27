@@ -99,6 +99,74 @@ export function extractProtocol(input: unknown): string {
   return 'aave';
 }
 
+export const CHAIN_ALIASES: Record<string, string> = {
+  ethereum: 'Ethereum', eth: 'Ethereum', mainnet: 'Ethereum',
+  base: 'Base',
+  arbitrum: 'Arbitrum', arb: 'Arbitrum',
+  polygon: 'Polygon', matic: 'Polygon',
+  optimism: 'Optimism', op: 'Optimism',
+  solana: 'Solana', sol: 'Solana',
+  avalanche: 'Avalanche', avax: 'Avalanche',
+  bsc: 'BSC', binance: 'BSC',
+  blast: 'Blast',
+  linea: 'Linea',
+  scroll: 'Scroll',
+  zksync: 'ZKsync Era',
+  fantom: 'Fantom', ftm: 'Fantom',
+};
+
+export interface ChainTvlResult {
+  kind: 'chain';
+  name: string;
+  slug: string;
+  chainId?: number;
+  tvl_usd: number;
+  source: 'defillama';
+  timestamp: string;
+}
+
+let chainsCache: { data: any[]; cachedAt: number } | null = null;
+const CHAINS_CACHE_TTL_MS = 60000;
+
+export async function fetchChainTvl(chainInput: string): Promise<ChainTvlResult | null> {
+  const norm = chainInput.toLowerCase().trim();
+  const canonicalName = CHAIN_ALIASES[norm] || norm;
+  const now = Date.now();
+
+  try {
+    let chains = chainsCache && (now - chainsCache.cachedAt < CHAINS_CACHE_TTL_MS) ? chainsCache.data : null;
+    if (!chains) {
+      const res = await axios.get(`${TVL_API_BASE}/v2/chains`, { timeout: TVL_CURRENT_TIMEOUT_MS });
+      if (Array.isArray(res.data)) {
+        chains = res.data;
+        chainsCache = { data: chains, cachedAt: now };
+      }
+    }
+
+    if (!chains) return null;
+
+    const match = chains.find((c: any) =>
+      c.name?.toLowerCase() === canonicalName.toLowerCase() ||
+      c.gecko_id?.toLowerCase() === norm ||
+      c.tokenSymbol?.toLowerCase() === norm
+    );
+
+    if (!match || typeof match.tvl !== 'number' || match.tvl <= 0) return null;
+
+    return {
+      kind: 'chain',
+      name: match.name,
+      slug: norm,
+      chainId: match.chainId,
+      tvl_usd: match.tvl,
+      source: 'defillama',
+      timestamp: new Date().toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
 function latestTvlPoint(points: TvlPoint[]): TvlPoint | null {
   const valid = points.filter(
     (point) => Number.isFinite(point.date) && Number.isFinite(point.totalLiquidityUSD) && point.totalLiquidityUSD >= 0,
@@ -155,36 +223,46 @@ export async function fetchProtocolTvl(protocolInput: unknown): Promise<TvlResul
     const currentUrl = `${TVL_API_BASE}/tvl/${encodeURIComponent(slug)}`;
     const historyUrl = `${TVL_API_BASE}/protocol/${encodeURIComponent(slug)}`;
 
-    // Use DefiLlama's dedicated current-TVL endpoint for the value we report.
-    // Keep the historical protocol endpoint only for the 7-day comparison.
-    const [currentResponse, historyResponse] = await Promise.all([
+    // Use Promise.allSettled so that history latency never blocks the current TVL read.
+    const [currentRes, historyRes] = await Promise.allSettled([
       axios.get(currentUrl, { timeout: TVL_CURRENT_TIMEOUT_MS }),
       axios.get(historyUrl, { timeout: TVL_TIMEOUT_MS }),
     ]);
 
-    const rawCurrentValue = currentResponse.data;
-    const currentValue = rawCurrentValue == null
-      || (typeof rawCurrentValue === 'string' && rawCurrentValue.trim() === '')
-      ? Number.NaN
-      : Number(rawCurrentValue);
-    const historyData = historyResponse.data;
-    const points: TvlPoint[] = Array.isArray(historyData?.tvl)
-      ? historyData.tvl.map((point: any) => ({
-          date: Number(point?.date),
-          totalLiquidityUSD: Number(point?.totalLiquidityUSD),
-        }))
-      : [];
+    let currentValue: number = Number.NaN;
+    if (currentRes.status === 'fulfilled') {
+      const rawCurrentValue = currentRes.value.data;
+      if (rawCurrentValue != null && !(typeof rawCurrentValue === 'string' && rawCurrentValue.trim() === '')) {
+        currentValue = Number(rawCurrentValue);
+      }
+    }
 
-    const latest = latestTvlPoint(points);
-    if (!Number.isFinite(currentValue) || currentValue < 0 || !latest) return null;
+    let protocolName = slug;
+    let delta7d: number | null = null;
 
-    const reference = findSevenDayReference(points, latest);
-    const delta7d = reference && reference.totalLiquidityUSD > 0
-      ? ((currentValue - reference.totalLiquidityUSD) / reference.totalLiquidityUSD) * 100
-      : null;
+    if (historyRes.status === 'fulfilled') {
+      const historyData = historyRes.value.data;
+      if (historyData?.name) protocolName = String(historyData.name);
+      const points: TvlPoint[] = Array.isArray(historyData?.tvl)
+        ? historyData.tvl.map((point: any) => ({
+            date: Number(point?.date),
+            totalLiquidityUSD: Number(point?.totalLiquidityUSD),
+          }))
+        : [];
+
+      const latest = latestTvlPoint(points);
+      if (latest && Number.isFinite(currentValue)) {
+        const reference = findSevenDayReference(points, latest);
+        if (reference && reference.totalLiquidityUSD > 0) {
+          delta7d = ((currentValue - reference.totalLiquidityUSD) / reference.totalLiquidityUSD) * 100;
+        }
+      }
+    }
+
+    if (!Number.isFinite(currentValue) || currentValue < 0) return null;
 
     const result: TvlResult = {
-      protocol: String(historyData?.name || slug),
+      protocol: protocolName,
       protocol_slug: slug,
       tvl_usd: currentValue,
       tvl_7d_delta_pct: Number.isFinite(delta7d) ? delta7d : null,
@@ -201,28 +279,79 @@ export async function fetchProtocolTvl(protocolInput: unknown): Promise<TvlResul
 }
 
 export async function handleMinerTvlLookup(req: Request, res: Response) {
-  const rawInput = req.query?.protocol
+  const input = req.body?.input;
+  const inputTarget = typeof input === 'string'
+    ? input
+    : input && typeof input === 'object'
+      ? (input.protocol || input.chain || input.asset || input.query || input.question || input.q)
+      : undefined;
+
+  const chainInput = req.query?.chain || req.body?.chain || (input && typeof input === 'object' ? input.chain : undefined);
+  const rawInput = chainInput
+    || req.query?.protocol
     || req.body?.protocol
     || req.query?.asset
     || req.body?.asset
+    || req.query?.query
     || req.body?.query
+    || req.query?.question
+    || req.body?.question
+    || req.query?.q
+    || req.body?.q
+    || inputTarget
     || 'Aave';
+
+  const nowIso = new Date().toISOString();
+
+  // If explicit chain query or raw input matches a known chain alias
+  const normalizedRaw = String(rawInput).toLowerCase().trim();
+  const matchedChain = chainInput
+    ? String(chainInput).toLowerCase().trim()
+    : Object.keys(CHAIN_ALIASES).find((alias) => normalizedRaw.includes(`chain ${alias}`) || normalizedRaw.includes(`on ${alias}`) || normalizedRaw === alias);
+
+  if (matchedChain) {
+    const chainData = await fetchChainTvl(matchedChain);
+    if (chainData) {
+      const answer = `${chainData.name} chain TVL is currently $${chainData.tvl_usd.toLocaleString('en-US', { maximumFractionDigits: 0 })} USD.`;
+      res.status(200).json({
+        status: 'success',
+        miner_id: 501,
+        intent: 'TVL_LOOKUP',
+        kind: 'chain',
+        chain: chainData.name,
+        chain_id: chainData.chainId,
+        answer,
+        summary: answer,
+        tvl_usd: chainData.tvl_usd,
+        confidence: 0.96,
+        confidence_score: 0.96,
+        source: chainData.source,
+        as_of: chainData.timestamp,
+        timestamp: chainData.timestamp,
+      });
+      return;
+    }
+  }
 
   const protocolSlug = extractProtocol(rawInput);
   const liveData = await fetchProtocolTvl(protocolSlug);
 
   if (!liveData) {
+    const unavailableAnswer = `TVL data temporarily unavailable for ${protocolSlug}.`;
     res.status(503).json({
       status: 'unavailable',
       miner_id: 501,
       intent: 'TVL_LOOKUP',
       protocol: protocolSlug,
-      answer: `TVL data temporarily unavailable for ${protocolSlug}.`,
+      answer: unavailableAnswer,
+      summary: unavailableAnswer,
       tvl_usd: null,
       tvl_7d_delta_pct: null,
       risk_signal: null,
-      confidence_score: 0,
-      timestamp: new Date().toISOString(),
+      confidence: 0.0,
+      confidence_score: 0.0,
+      timestamp: nowIso,
+      as_of: nowIso,
       source: 'none',
     });
     return;
@@ -233,17 +362,24 @@ export async function handleMinerTvlLookup(req: Request, res: Response) {
     ? `, ${liveData.tvl_7d_delta_pct >= 0 ? '+' : ''}${liveData.tvl_7d_delta_pct.toFixed(2)}% over 7d`
     : '';
 
+  const answer = `${liveData.protocol} TVL is currently $${liveData.tvl_usd.toLocaleString('en-US', { maximumFractionDigits: 0 })} USD${deltaText}.`;
+  const confidence = typeof liveData.tvl_7d_delta_pct === 'number' ? 0.96 : 0.94;
+
   res.status(200).json({
     status: 'success',
     miner_id: 501,
     intent: 'TVL_LOOKUP',
+    kind: 'protocol',
     protocol: liveData.protocol,
     protocol_slug: liveData.protocol_slug,
-    answer: `${liveData.protocol} TVL is currently $${liveData.tvl_usd.toLocaleString('en-US', { maximumFractionDigits: 0 })} USD${deltaText}.`,
+    answer,
+    summary: answer,
     tvl_usd: liveData.tvl_usd,
     tvl_7d_delta_pct: liveData.tvl_7d_delta_pct,
     risk_signal: riskSignal,
-    confidence_score: 0.95,
+    confidence,
+    confidence_score: confidence,
+    as_of: liveData.timestamp,
     timestamp: liveData.timestamp,
     source: liveData.source,
     source_url: liveData.source_url,
