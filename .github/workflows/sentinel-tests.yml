@@ -31,6 +31,9 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Crypto price tests
+        run: npm run test:crypto
+
       - name: TVL tests
         run: npm run test:tvl
 

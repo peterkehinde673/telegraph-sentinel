@@ -18,7 +18,7 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 | **Phase 1** | Baseline audit | **COMPLETE** | Full repo, CI, production endpoint audit, and protocol devnode catalog queries completed; baseline facts documented. Commit `eb34c77`, PR #24 passed all 5 CI checks. |
 | **Phase 2** | Canonical intent research | **COMPLETE** | Analyzed 134 intents across 1,922 miners; documented competition metrics; shortlisted `FRAUD_RISK` and `CRYPTO_YIELD_RATE`. Commit `1cd2d9a`, PR #25 passed all 5 CI checks. |
 | **Phase 3** | Adapt the reference miner YAML | **COMPLETE** | Adapted top-level input/output schemas, on-chain block, and signal mapping from reference YAML; preserved Sentinel identity (501); automated in `tests/yaml.test.ts` and CI. Commit `848e5b3`, PR #26 passed all 5 CI checks. |
-| **Phase 4** | Improve the original three intents | **NOT STARTED** | Enhance `CRYPTO_PRICE`, `TVL_LOOKUP`, and `WEB_SEARCH` handlers, schemas, error fallbacks, and test coverage. |
+| **Phase 4** | Improve the original three intents | **COMPLETE** | Enhanced `CRYPTO_PRICE`, `TVL_LOOKUP`, and `WEB_SEARCH` handlers, calibrated confidences, query aliases, DefiLlama chain lookups, and test coverage. Commit `c9b07a6`, PR #27 passed all 5 CI checks. |
 | **Phase 5** | Implement additional verified intents | **NOT STARTED** | Implement and test verified low-competition canonical intents supported by Phase 2 research. |
 | **Phase 6** | Build and regression testing | **NOT STARTED** | Run test suites across node gateway, python engine, WASM scorer, and configuration validators. |
 | **Phase 7** | Register or update the miner | **NOT STARTED** | Submit updated manifest to the protocol registry and verify registration status independently. |
@@ -159,12 +159,33 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 ---
 
 ### Phase 4 — Improve the original three intents
-- **Status:** `NOT STARTED`
+- **Status:** `COMPLETE`
 - **Objectives:**
   - Preserve and improve `CRYPTO_PRICE`, `TVL_LOOKUP`, and `WEB_SEARCH`.
   - Address correctness, upstream source reliability, freshness, caching, natural-language parsing, timeouts, and error handling.
   - Calibrate confidence scoring based on verifiable source characteristics.
   - Maintain comprehensive test coverage without regressions.
+- **Completion Evidence:**
+  1. **CRYPTO_PRICE Intent Handler:**
+     - Calibrated source-specific confidence scoring (`binance`/`coinbase`: 0.98, `kraken`: 0.96, `coingecko`: 0.94, unavailable: 0.0).
+     - Expanded input alias parsing to support `pair`, `symbol`, `ticker`, `q`, `question`, and `body.input` string/object parameters.
+     - Added matching `summary` and `as_of` freshness timestamp fields.
+     - Reduced upstream timeout to 3000ms for fast oracle execution.
+     - Created dedicated test suite `backend/node/tests/crypto_price.test.ts` (`npm run test:crypto`).
+  2. **TVL_LOOKUP Intent Handler:**
+     - Implemented DefiLlama chain-level TVL lookup (`fetchChainTvl`) supporting chain aliases (e.g. `base`, `ethereum`, `arbitrum`, `polygon`).
+     - Wrapped historical protocol queries in `Promise.allSettled` to isolate latency and prevent historical queries from timing out current TVL reads.
+     - Added `kind: 'protocol' | 'chain'`, `summary`, `confidence`, and `as_of`.
+     - Added tests in `backend/node/tests/tvl.test.ts` verifying chain TVL and alias handling.
+  3. **WEB_SEARCH Intent Handler:**
+     - Added natural-language query parameter aliases (`q`, `question`, `search`, `body.input`).
+     - Added `hits` array alias alongside `results`.
+     - Calibrated confidence (0.0 when unavailable/failing) and added `summary` and `as_of` timestamps.
+     - Enhanced `backend/node/tests/web_search.test.ts` testing handler aliases and response contracts.
+  4. **Schema & CI Automation:**
+     - Updated schemas in `docs/sentinel-miner.yaml` and `public/engine-subnets/sentinel-risk-oracle.yaml`.
+     - Added `test:crypto` to `backend/node/package.json` and `.github/workflows/sentinel-tests.yml`.
+     - Commit `c9b07a6`, PR #27 passed all 5 GitHub Actions Sentinel CI jobs (`Node gateway`, `Root application`, `Frontend package`, `Python risk engine`, `Sentinel CI`).
 
 ---
 

@@ -10,7 +10,7 @@ interface PriceCache {
 
 const priceCache: Record<string, PriceCache> = {};
 const CACHE_TTL_MS = 15000; // Keep benchmark answers fresh while avoiding repeated upstream calls
-const UPSTREAM_TIMEOUT_MS = 5000;
+const UPSTREAM_TIMEOUT_MS = 3000;
 
 const ASSET_ALIASES: Record<string, string> = {
   btc: 'BTC', bitcoin: 'BTC', xbt: 'BTC',
@@ -254,11 +254,11 @@ export async function fetchLiveCryptoPrice(symbol: string): Promise<LivePriceRes
 
 function logCryptoEvaluationRequest(
   req: Request,
+  rawInput: unknown,
   asset: string,
   liveData: LivePriceResult | null,
 ): void {
   const question = req.body?.question || req.body?.query || req.query?.question || req.query?.query || null;
-  const rawInput = req.query?.asset || req.body?.asset || req.query?.symbol || req.body?.symbol || req.body?.query || 'ETH';
 
   console.log('[CRYPTO_PRICE_DIAGNOSTIC]', JSON.stringify({
     timestamp: new Date().toISOString(),
@@ -275,43 +275,78 @@ function logCryptoEvaluationRequest(
   }));
 }
 
+export function calculateCryptoConfidence(source: LivePriceResult['source'] | null): number {
+  if (!source) return 0.0;
+  switch (source) {
+    case 'binance':
+    case 'coinbase':
+      return 0.98;
+    case 'kraken':
+      return 0.96;
+    case 'coingecko':
+      return 0.94;
+    default:
+      return 0.90;
+  }
+}
+
 export async function handleMinerRiskAssessment(req: Request, res: Response) {
   const input = req.body?.input;
   const inputAsset = typeof input === 'string'
     ? input
     : input && typeof input === 'object'
-      ? (input.asset || input.symbol || input.query || input.question)
+      ? (input.asset || input.symbol || input.pair || input.query || input.question || input.q)
       : undefined;
-  const rawInput = req.query?.asset || req.body?.asset || req.query?.symbol || req.body?.symbol
-    || req.body?.query || req.body?.question || inputAsset || req.query?.question || req.query?.query || 'ETH';
+  const rawInput = req.query?.asset || req.body?.asset
+    || req.query?.symbol || req.body?.symbol
+    || req.query?.pair || req.body?.pair
+    || req.query?.ticker || req.body?.ticker
+    || req.query?.query || req.body?.query
+    || req.query?.question || req.body?.question
+    || req.query?.q || req.body?.q
+    || inputAsset || 'ETH';
   const asset = extractAsset(rawInput);
   const liveData = await fetchLiveCryptoPrice(asset);
-  logCryptoEvaluationRequest(req, asset, liveData);
+  logCryptoEvaluationRequest(req, rawInput, asset, liveData);
+
+  const nowIso = new Date().toISOString();
 
   if (!liveData) {
+    const unavailableAnswer = `${asset} price data temporarily unavailable from upstream sources.`;
     res.status(200).json({
-      status: 'success',
+      status: 'unavailable',
       miner_id: 501,
       intent: 'CRYPTO_PRICE',
       asset,
-      answer: `${asset} price data temporarily unavailable from upstream sources.`,
+      answer: unavailableAnswer,
+      summary: unavailableAnswer,
       price_usd: null,
-      confidence_score: 0.5,
-      timestamp: new Date().toISOString(),
+      change_24h_pct: null,
+      confidence: 0.0,
+      confidence_score: 0.0,
+      source: 'none',
+      as_of: nowIso,
+      timestamp: nowIso,
     });
     return;
   }
+
+  const confidence = calculateCryptoConfidence(liveData.source);
+  const answer = `${asset} is currently trading at $${liveData.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 })} USD.`;
 
   res.status(200).json({
     status: 'success',
     miner_id: 501,
     intent: 'CRYPTO_PRICE',
     asset,
-    answer: `${asset} is currently trading at $${liveData.price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 8 })} USD.`,
+    answer,
+    summary: answer,
     price_usd: liveData.price,
     change_24h_pct: liveData.change24h,
-    confidence_score: 0.98,
+    confidence,
+    confidence_score: confidence,
     source: liveData.source,
-    timestamp: new Date().toISOString(),
+    as_of: nowIso,
+    timestamp: nowIso,
   });
 }
