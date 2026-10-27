@@ -19,7 +19,7 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 | **Phase 2** | Canonical intent research | **COMPLETE** | Analyzed 134 intents across 1,922 miners; documented competition metrics; shortlisted `FRAUD_RISK` and `CRYPTO_YIELD_RATE`. Commit `1cd2d9a`, PR #25 passed all 5 CI checks. |
 | **Phase 3** | Adapt the reference miner YAML | **COMPLETE** | Adapted top-level input/output schemas, on-chain block, and signal mapping from reference YAML; preserved Sentinel identity (501); automated in `tests/yaml.test.ts` and CI. Commit `848e5b3`, PR #26 passed all 5 CI checks. |
 | **Phase 4** | Improve the original three intents | **COMPLETE** | Enhanced `CRYPTO_PRICE`, `TVL_LOOKUP`, and `WEB_SEARCH` handlers, calibrated confidences, query aliases, DefiLlama chain lookups, and test coverage. Commit `c9b07a6`, PR #27 passed all 5 CI checks. |
-| **Phase 5** | Implement additional verified intents | **NOT STARTED** | Implement and test verified low-competition canonical intents supported by Phase 2 research. |
+| **Phase 5** | Implement additional verified intents | **COMPLETE** | Implemented `FRAUD_RISK` and `CRYPTO_YIELD_RATE` handlers, routes, schemas, and test suites. Commit `e3a40f5`, PR #28 passed all 5 CI checks. |
 | **Phase 6** | Build and regression testing | **NOT STARTED** | Run test suites across node gateway, python engine, WASM scorer, and configuration validators. |
 | **Phase 7** | Register or update the miner | **NOT STARTED** | Submit updated manifest to the protocol registry and verify registration status independently. |
 | **Phase 8** | Investigate and restore request flow | **NOT STARTED** | Analyze the 304 requests-served bottleneck, schema compliance, routing delays, and rate limiting. |
@@ -190,11 +190,30 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 ---
 
 ### Phase 5 — Implement additional verified intents
-- **Status:** `NOT STARTED`
+- **Status:** `COMPLETE`
 - **Objectives:**
   - Select candidate intents supported by Phase 2 research.
   - Implement real handlers, validation, output mapping, and tests.
   - Avoid superficial additions; ensure all declared capabilities work end-to-end.
+- **Completion Evidence:**
+  1. **FRAUD_RISK Intent Handler:**
+     - Created `backend/node/src/fraud_risk.ts` exposing `POST /api/v1/miner/fraud-risk`.
+     - Integrated address extraction (EVM 0x format), high-risk threat database (Tornado Cash router/pools, OFAC sanctioned entities, Inferno/Pink/Monkey drainers), canonical safe contract registry (Uniswap V3, Aave, Lido, MakerDAO, USDC), and keyword heuristic attack detection (permit2 drainers, phishing signatures).
+     - Standardized discrete verdict tiers: `"High fraud risk"`, `"Elevated fraud risk"`, `"Low fraud risk"`, and `"Insufficient information"`.
+     - Calibrated confidence scoring (0.95-0.98 for verified targets, 0.0 for empty queries).
+     - Created dedicated test suite `backend/node/tests/fraud_risk.test.ts` (`npm run test:fraud`).
+  2. **CRYPTO_YIELD_RATE Intent Handler:**
+     - Created `backend/node/src/yield_oracle.ts` exposing `POST /api/v1/miner/yield`.
+     - Integrated DefiLlama pools API (`https://yields.llama.fi/pools`) with in-memory 10-minute caching and seeded benchmark pools fallback table (Lido stETH, Aave V3 USDC/USDT/WETH, Rocket Pool rETH, Maker sDAI, Ethena sUSDe, Compound v3).
+     - Computed APY, integer basis points (`apy_bps`), nominal APR, TVL, and formatted natural-language answers and summaries.
+     - Created dedicated test suite `backend/node/tests/yield.test.ts` (`npm run test:yield`).
+  3. **Gateway Routing & Manifest Declaration:**
+     - Wired both endpoints in `backend/node/src/server.ts`.
+     - Updated `docs/sentinel-miner.yaml`, `public/engine-subnets/sentinel-risk-oracle.yaml`, and `backend/node/src/telegraph/yaml.ts` declaring all 5 intents, endpoints, input schemas, and output schemas.
+     - Verified all 5 intents pass YAML validation tests (`npm run test:yaml`).
+  4. **CI Integration & Verification:**
+     - Added `test:fraud` and `test:yield` to `backend/node/package.json` and `.github/workflows/sentinel-tests.yml`.
+     - Commit `e3a40f5`, PR #28 passed all 5 GitHub Actions Sentinel CI jobs (`Node gateway`, `Root application`, `Frontend package`, `Python risk engine`, `Sentinel CI`).
 
 ---
 
