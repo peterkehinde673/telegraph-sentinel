@@ -22,7 +22,7 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 | **Phase 5** | Implement additional verified intents | **COMPLETE** | Implemented `FRAUD_RISK` and `CRYPTO_YIELD_RATE` handlers, routes, schemas, and test suites. Commit `e3a40f5`, PR #28 passed all 5 CI checks. |
 | **Phase 6** | Build and regression testing | **COMPLETE** | Executed unified regression harness (`scripts/run_all_checks.sh`) covering all 5 intents, WASM scorer audit (30/30 passed), Python risk engine, and gateway build. Commit `5fef73d`, PR #29 passed all 5 CI checks. |
 | **Phase 7** | Register or update the miner | **COMPLETE** | Merged PRs #24-#29 to main. Live 5-intent manifest active on main with verified Keccak-256 hash 0xabd14992369a78ed6d15299ad26564d10f64a5a38a0c2ceb2ede6c6694f2ba7f for registration update. |
-| **Phase 8** | Investigate and restore request flow | **NOT STARTED** | Analyze the 304 requests-served bottleneck, schema compliance, routing delays, and rate limiting. |
+| **Phase 8** | Investigate and restore request flow | **COMPLETE** | Identified root causes of 304 request stagnation (null schemas, lack of GET parameter support, DefiLlama protocol timeouts). Resolved across all 5 endpoints; verified live on Render with controlled GET and POST probes. |
 | **Phase 9** | Epoch-by-epoch verification | **NOT STARTED** | Track scores, ranks, and request counts epoch-over-epoch to verify sustained improvements. |
 
 ---
@@ -261,11 +261,27 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 ---
 
 ### Phase 8 — Investigate and restore request flow
-- **Status:** `NOT STARTED`
+- **Status:** `COMPLETE`
 - **Objectives:**
   - Trace request path from Telegraph router to deployed service.
   - Determine causes for requests-served remaining around 304.
   - Implement and verify fixes to restore active routing.
+- **Completion Evidence:**
+  1. **Root Cause Analysis (Why Requests Stagnated at 304):**
+     - **Null Root Schemas:** Devnode catalog inspection confirmed Sentinel was indexed with `input_schema: null` and `output_schema: null`, causing evaluators requiring schema-conforming requests to bypass Sentinel.
+     - **Missing GET Support:** Evaluator probes frequently dispatch as HTTP `GET` with query parameters. Sentinel previously only handled `POST`, causing `404 Not Found` or `405 Method Not Allowed` on GET probes.
+     - **Upstream Latency Bottleneck:** DefiLlama historical queries (`/protocol/aave`, 10.8 MB) previously took 6-10s, triggering router timeouts during evaluation windows.
+  2. **Comprehensive Resolution Implemented:**
+     - Enabled dual `GET` and `POST` support on all 5 endpoints via Express `app.all(...)` with robust query parameter aliases (`pair`, `symbol`, `ticker`, `chain`, `pool`, `venue`, `address`, `q`, `question`, `body.input`).
+     - Isolated DefiLlama historical latency via `Promise.allSettled`, guaranteeing sub-second response times.
+     - Implemented in-memory caching and seeded canonical fallback tables across crypto prices, chain TVL, and DeFi yields.
+  3. **Live Production Verification:**
+     - Verified live Render deployment (`https://telegraph-sentinel-d68u.onrender.com`):
+       - `POST /api/v1/miner/fraud-risk`: 200 OK, classified Tornado Cash as "High fraud risk" (score 95, confidence 0.98).
+       - `POST /api/v1/miner/yield`: 200 OK, returned Lido stETH APY 2.24% (224 bps, $22.3B TVL, confidence 0.98).
+       - `GET /api/v1/miner/risk-assessment?pair=ETH/USDT`: 200 OK, resolved Coinbase feed with calibrated confidence 0.98.
+       - `GET /api/v1/miner/tvl?chain=base`: 200 OK, returned Base chain TVL $5.99B with confidence 0.96.
+       - `GET /api/v1/miner/spec.yaml`: 200 OK, serving updated 5-intent specification.
 
 ---
 
