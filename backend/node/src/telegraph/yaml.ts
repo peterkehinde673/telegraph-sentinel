@@ -10,6 +10,12 @@ export interface TelegraphMinerSpec {
   intents: string[];
   endpoints: Array<{ intent: string; path: string; method: 'GET' | 'POST'; description: string; requestParameters: Record<string, any>; responseSchema: Record<string, any>; telegraph_direct?: { required_payload_keys: string[] }; }>;
   onchain: { feeRecipient: string; chainIdentifier: string; };
+  input_schema?: Record<string, any>;
+  output_schema?: Record<string, any>;
+  semantics?: {
+    signal_mapping?: Record<string, string>;
+    supported_intents?: string[];
+  };
 }
 
 export function generateDefaultSentinelYaml(hostUrl?: string, feeRecipient?: string): TelegraphMinerSpec {
@@ -49,6 +55,43 @@ export function generateDefaultSentinelYaml(hostUrl?: string, feeRecipient?: str
       feeRecipient: feeRecipient || (config.x402.walletPrivateKey ? new ethers.Wallet(config.x402.walletPrivateKey.startsWith('0x') ? config.x402.walletPrivateKey : `0x${config.x402.walletPrivateKey}`).address : '0x0000000000000000000000000000000000000000'),
       chainIdentifier: config.telegraph.network,
     },
+    input_schema: {
+      type: 'object',
+      properties: {
+        asset: { type: 'string', description: 'Cryptocurrency ticker or symbol (e.g. BTC, ETH, SOL).' },
+        symbol: { type: 'string', description: 'Trading symbol or market pair alias (e.g. BTCUSDT, ETH-USD).' },
+        protocol: { type: 'string', description: 'DeFi protocol slug or name (e.g. aave, uniswap, lido).' },
+        chain: { type: 'string', description: 'Blockchain network name for chain TVL (e.g. ethereum, base, arbitrum).' },
+        query: { type: 'string', description: 'Search query or natural-language intelligence question.' },
+        question: { type: 'string', description: 'Verbatim natural-language question from Telegraph evaluators.' },
+      },
+      required: [],
+    },
+    output_schema: {
+      type: 'object',
+      properties: {
+        status: { type: 'string', description: 'Status of the response (success, unavailable, error).' },
+        miner_id: { type: 'integer', description: 'Registered Telegraph miner identifier (501).' },
+        intent: { type: 'string', description: 'Canonical intent evaluated (CRYPTO_PRICE, TVL_LOOKUP, WEB_SEARCH).' },
+        answer: { type: 'string', description: 'Human-readable authoritative answer string.' },
+        confidence: { type: 'number', description: 'Calibrated confidence score between 0.0 and 1.0.' },
+        confidence_score: { type: 'number', description: 'Backward-compatible confidence score field.' },
+        price_usd: { type: ['number', 'null'], description: 'Spot price in USD for CRYPTO_PRICE queries.' },
+        tvl_usd: { type: ['number', 'null'], description: 'Total value locked in USD for TVL queries.' },
+        results: { type: 'array', description: 'Web search intelligence results.' },
+        source: { type: 'string', description: 'Authoritative data source provider.' },
+        timestamp: { type: 'string', description: 'ISO 8601 timestamp of response generation.' },
+      },
+      required: ['status', 'answer', 'confidence_score'],
+    },
+    semantics: {
+      signal_mapping: {
+        confidence_field: 'confidence_score',
+        label_field: 'answer',
+        reason_field: 'answer',
+      },
+      supported_intents: ['CRYPTO_PRICE', 'TVL_LOOKUP', 'WEB_SEARCH'],
+    },
   };
 }
 
@@ -59,10 +102,21 @@ export function parseAndValidateYaml(rawYaml: string): { valid: boolean; spec?: 
   try { parsed = yaml.load(rawYaml); } catch (err: any) { return { valid: false, errors: [`YAML Syntax Error: ${err.message}`] }; }
   if (!parsed || typeof parsed !== 'object') return { valid: false, errors: ['Parsed YAML must be an object'] };
   if (parsed.kind !== 'miner') errors.push("Missing or invalid 'kind' field (must be 'miner')");
-  if (!parsed.metadata?.name) errors.push("Missing 'metadata.name'");
-  if (!parsed.metadata?.slug) errors.push("Missing 'metadata.slug'");
-  if (!Array.isArray(parsed.intents) || parsed.intents.length === 0) errors.push("Field 'intents' must be a non-empty list of strings");
-  if (!parsed.network?.baseUrl) errors.push("Missing 'network.baseUrl'");
+
+  const name = parsed.metadata?.name || parsed.name;
+  if (!name) errors.push("Missing 'metadata.name' or 'name'");
+
+  const slug = parsed.metadata?.slug || parsed.slug;
+  if (!slug) errors.push("Missing 'metadata.slug' or 'slug'");
+
+  const intents = parsed.intents || parsed.semantics?.supported_intents;
+  if (!Array.isArray(intents) || intents.length === 0) {
+    errors.push("Field 'intents' or 'semantics.supported_intents' must be a non-empty list of strings");
+  }
+
+  const baseUrl = parsed.network?.baseUrl || parsed.base_url;
+  if (!baseUrl) errors.push("Missing 'network.baseUrl' or 'base_url'");
+
   const normalizedStr = typeof parsed === 'object' ? JSON.stringify(parsed, Object.keys(parsed).sort()) : rawYaml;
   const utf8Bytes = ethers.toUtf8Bytes(normalizedStr); const sha256Hash = ethers.sha256(utf8Bytes); const keccak256Hash = ethers.keccak256(utf8Bytes);
   const ipfsCidPlaceholder = `bafkrei${sha256Hash.slice(2, 48)}`;

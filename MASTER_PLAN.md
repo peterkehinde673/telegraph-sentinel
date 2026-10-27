@@ -17,7 +17,7 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 |---|---|---|---|
 | **Phase 1** | Baseline audit | **COMPLETE** | Full repo, CI, production endpoint audit, and protocol devnode catalog queries completed; baseline facts documented. Commit `eb34c77`, PR #24 passed all 5 CI checks. |
 | **Phase 2** | Canonical intent research | **COMPLETE** | Analyzed 134 intents across 1,922 miners; documented competition metrics; shortlisted `FRAUD_RISK` and `CRYPTO_YIELD_RATE`. Commit `1cd2d9a`, PR #25 passed all 5 CI checks. |
-| **Phase 3** | Adapt the reference miner YAML | **NOT STARTED** | Adapt schema and semantic structure from reference Groq miner YAML while preserving Sentinel identity and endpoints. |
+| **Phase 3** | Adapt the reference miner YAML | **COMPLETE** | Adapted top-level input/output schemas, on-chain block, and signal mapping from reference YAML; preserved Sentinel identity (501); automated in `tests/yaml.test.ts` and CI. Commit `848e5b3`, PR #26 passed all 5 CI checks. |
 | **Phase 4** | Improve the original three intents | **NOT STARTED** | Enhance `CRYPTO_PRICE`, `TVL_LOOKUP`, and `WEB_SEARCH` handlers, schemas, error fallbacks, and test coverage. |
 | **Phase 5** | Implement additional verified intents | **NOT STARTED** | Implement and test verified low-competition canonical intents supported by Phase 2 research. |
 | **Phase 6** | Build and regression testing | **NOT STARTED** | Run test suites across node gateway, python engine, WASM scorer, and configuration validators. |
@@ -133,12 +133,28 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 ---
 
 ### Phase 3 — Adapt the reference miner YAML
-- **Status:** `NOT STARTED`
+- **Status:** `COMPLETE`
 - **Objectives:**
   - Inspect reference YAML (`groq-llama31-instant-miner.yaml`) and existing `docs/sentinel-miner.yaml`.
   - Verify official registration schema, including top-level `input_schema`, `output_schema`, and `semantics.signal_mapping`.
   - Preserve Sentinel's identity (`sentinel-risk-oracle`, ID 501, production URL).
   - Ensure every declared intent maps to a verified endpoint and schema.
+
+#### Confirmed Adaptations & Verification
+1. **Preserved Identity & Endpoints:**
+   - Retained Sentinel ID `501`, slug `sentinel-risk-oracle`, protocol `generic`, name `Telegraph Sentinel Risk Intelligence`, and production URL `https://telegraph-sentinel-d68u.onrender.com`.
+   - Maintained all 3 production endpoints with `telegraph_direct` payload requirements intact.
+2. **Adapted Reference YAML Architecture:**
+   - **Top-Level `input_schema`:** Added standard JSON Schema covering `asset`, `symbol`, `protocol`, `chain`, `query`, `question`, and `q`.
+   - **Top-Level `output_schema`:** Added standard JSON Schema declaring `status`, `miner_id`, `intent`, `answer`, `confidence`, `confidence_score`, `price_usd`, `tvl_usd`, `results`, `source`, and `timestamp`.
+   - **`on_chain` Settlement Definition:** Adapted direct transform block specifying string response path (`answer`), scaled integer confidence (`confidence_score` $\times 10,000$), and endpoint call configuration.
+   - **`semantics.signal_mapping`:** Standardized `confidence_field: confidence_score`, `label_field: answer`, `reason_field: answer`.
+3. **Parser & Gateway Enhancements (`src/telegraph/yaml.ts`):**
+   - Generalized `parseAndValidateYaml` to seamlessly accept both flat protocol registration manifests (`name`, `slug`, `base_url`, `semantics.supported_intents`) and nested programmatic specs (`metadata.name`, `network.baseUrl`, `intents`).
+   - Enhanced `generateDefaultSentinelYaml` to programmatically serve the complete schema on `GET /api/v1/miner/spec.yaml`.
+4. **Validation Test Suite & CI Integration:**
+   - Created dedicated unit test `backend/node/tests/yaml.test.ts` (`npm run test:yaml`) verifying `docs/sentinel-miner.yaml`, `public/engine-subnets/sentinel-risk-oracle.yaml`, and programmatic spec.
+   - Integrated `npm run test:yaml` into the repository GitHub Actions CI workflow (`.github/workflows/sentinel-tests.yml`).
 
 ---
 

@@ -9,7 +9,8 @@
     "build": "tsc",
     "test": "tsx tests/gateway.test.ts",
     "test:tvl": "tsx tests/tvl.test.ts",
-    "test:web-search": "tsx tests/web_search.test.ts"
+    "test:web-search": "tsx tests/web_search.test.ts",
+    "test:yaml": "tsx tests/yaml.test.ts"
   },
   "dependencies": {
     "@types/cors": "^2.8.17",
