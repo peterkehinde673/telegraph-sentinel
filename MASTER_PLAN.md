@@ -20,7 +20,7 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 | **Phase 3** | Adapt the reference miner YAML | **COMPLETE** | Adapted top-level input/output schemas, on-chain block, and signal mapping from reference YAML; preserved Sentinel identity (501); automated in `tests/yaml.test.ts` and CI. Commit `848e5b3`, PR #26 passed all 5 CI checks. |
 | **Phase 4** | Improve the original three intents | **COMPLETE** | Enhanced `CRYPTO_PRICE`, `TVL_LOOKUP`, and `WEB_SEARCH` handlers, calibrated confidences, query aliases, DefiLlama chain lookups, and test coverage. Commit `c9b07a6`, PR #27 passed all 5 CI checks. |
 | **Phase 5** | Implement additional verified intents | **COMPLETE** | Implemented `FRAUD_RISK` and `CRYPTO_YIELD_RATE` handlers, routes, schemas, and test suites. Commit `e3a40f5`, PR #28 passed all 5 CI checks. |
-| **Phase 6** | Build and regression testing | **NOT STARTED** | Run test suites across node gateway, python engine, WASM scorer, and configuration validators. |
+| **Phase 6** | Build and regression testing | **COMPLETE** | Executed unified regression harness (`scripts/run_all_checks.sh`) covering all 5 intents, WASM scorer audit (30/30 passed), Python risk engine, and gateway build. Commit `5fef73d`, PR #29 passed all 5 CI checks. |
 | **Phase 7** | Register or update the miner | **NOT STARTED** | Submit updated manifest to the protocol registry and verify registration status independently. |
 | **Phase 8** | Investigate and restore request flow | **NOT STARTED** | Analyze the 304 requests-served bottleneck, schema compliance, routing delays, and rate limiting. |
 | **Phase 9** | Epoch-by-epoch verification | **NOT STARTED** | Track scores, ranks, and request counts epoch-over-epoch to verify sustained improvements. |
@@ -218,10 +218,26 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 ---
 
 ### Phase 6 — Build and regression testing
-- **Status:** `NOT STARTED`
+- **Status:** `COMPLETE`
 - **Objectives:**
   - Run applicable test suites: Unit/integration tests, type checks, YAML validation, API request tests, upstream failure handling, and regression checks.
   - Verify all Sentinel CI components pass cleanly.
+- **Completion Evidence:**
+  1. **Unified Regression Test Harness:**
+     - Created `scripts/run_all_checks.sh` automating end-to-end multi-runtime verification.
+     - Added `npm run test:all` to `backend/node/package.json` chaining all 5 intent suites and YAML manifest validations.
+  2. **Test Suite Verification Results:**
+     - **Node Gateway TypeScript Build:** `tsc` passed with 0 compiler errors.
+     - **CRYPTO_PRICE Tests:** Verified natural language parsing, asset aliases, multi-exchange fallbacks, and calibrated confidence (`npm run test:crypto`).
+     - **FRAUD_RISK Tests:** Verified threat list detection (Tornado Cash, OFAC sanctioned), safe protocol recognition, drainer keyword heuristics, and verdict tiers (`npm run test:fraud`).
+     - **TVL_LOOKUP Tests:** Verified natural language protocol parsing, chain-level lookups (Base, Ethereum), and DefiLlama upstream latency isolation (`npm run test:tvl`).
+     - **WEB_SEARCH Tests:** Verified risk classification, Gemini grounding fallback to Tavily, and response contract (`npm run test:web-search`).
+     - **CRYPTO_YIELD_RATE Tests:** Verified DefiLlama pools caching, query normalization, seeded benchmark fallbacks (stETH, Aave V3 USDC), and basis points mapping (`npm run test:yield`).
+     - **Miner YAML Validation:** Verified both `docs/sentinel-miner.yaml` and `public/engine-subnets/sentinel-risk-oracle.yaml` with schema hashes and 5 mapped endpoints (`npm run test:yaml`).
+     - **Python Risk Engine Suite:** Passed health check, multi-signal risk evaluation, and SQLite watch-rules persistence (`python tests/run_tests.py`).
+     - **WASM Scorer Audit Suite:** Passed 30/30 adversarial test cases with 100.0% ordering accuracy, +0.9868 average separation margin, and strict equivalence between cached and direct scoring (`node wasm/validate_scorer.js`).
+  3. **CI Integration & PR:**
+     - Commit `5fef73d`, PR #29 passed all 5 GitHub Actions Sentinel CI jobs (`Node gateway`, `Root application`, `Frontend package`, `Python risk engine`, `Sentinel CI`).
 
 ---
 

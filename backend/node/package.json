@@ -8,6 +8,7 @@
     "start": "node dist/server.js",
     "build": "tsc",
     "test": "tsx tests/gateway.test.ts",
+    "test:all": "npm run test:crypto && npm run test:fraud && npm run test:tvl && npm run test:web-search && npm run test:yield && npm run test:yaml",
     "test:crypto": "tsx tests/crypto_price.test.ts",
     "test:fraud": "tsx tests/fraud_risk.test.ts",
     "test:tvl": "tsx tests/tvl.test.ts",
