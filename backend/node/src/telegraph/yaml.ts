@@ -30,7 +30,7 @@ export function generateDefaultSentinelYaml(hostUrl?: string, feeRecipient?: str
       supportedChains: ['eip155:84532', 'eip155:8453'], baseUrl: base,
       x402: { enabled: true, facilitatorUrl: config.x402.facilitatorUrl, defaultNetwork: config.telegraph.network, pricingModel: 'x402-per-request', floorPriceUsd: 0.001 },
     },
-    intents: ['CRYPTO_PRICE', 'TVL_LOOKUP', 'WEB_SEARCH'],
+    intents: ['CRYPTO_PRICE', 'TVL_LOOKUP', 'WEB_SEARCH', 'FRAUD_RISK', 'CRYPTO_YIELD_RATE'],
     endpoints: [
       {
         intent: 'CRYPTO_PRICE', path: '/api/v1/miner/risk-assessment', method: 'POST',
@@ -49,6 +49,18 @@ export function generateDefaultSentinelYaml(hostUrl?: string, feeRecipient?: str
         description: 'Real-time web intelligence search backed by Gemini Google Search grounding with Tavily as a fallback.',
         requestParameters: { query: { type: 'string', required: true, example: 'Latest security incidents affecting Aave' } }, telegraph_direct: { required_payload_keys: ['query'] },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', query: 'string', answer: 'string', results: 'array', risk_signal: 'number', confidence_score: 'number' },
+      },
+      {
+        intent: 'FRAUD_RISK', path: '/api/v1/miner/fraud-risk', method: 'POST',
+        description: 'Autonomous pre-flight fraud and drainer risk analysis engine evaluating addresses, transactions, and attack signatures.',
+        requestParameters: { address: { type: 'string', required: false, example: '0xd90e2f925da726b50c4ed8d0fb90ad053324f31b' }, query: { type: 'string', required: false, example: 'Is this address safe?' } }, telegraph_direct: { required_payload_keys: ['query'] },
+        responseSchema: { status: 'string', miner_id: 'number', intent: 'string', verdict: 'string', risk_score: 'number', confidence_score: 'number', summary: 'string' },
+      },
+      {
+        intent: 'CRYPTO_YIELD_RATE', path: '/api/v1/miner/yield', method: 'POST',
+        description: 'Real-time DeFi pool yield oracle reporting APY, basis points, and TVL across major protocols.',
+        requestParameters: { pool: { type: 'string', required: false, example: 'stETH' }, query: { type: 'string', required: false, example: 'What is Lido stETH APY?' } }, telegraph_direct: { required_payload_keys: ['pool'] },
+        responseSchema: { status: 'string', miner_id: 'number', intent: 'string', pool: 'string', venue: 'string', apy: 'number', apy_bps: 'number', confidence_score: 'number', summary: 'string' },
       },
     ],
     onchain: {
@@ -72,13 +84,20 @@ export function generateDefaultSentinelYaml(hostUrl?: string, feeRecipient?: str
       properties: {
         status: { type: 'string', description: 'Status of the response (success, unavailable, error).' },
         miner_id: { type: 'integer', description: 'Registered Telegraph miner identifier (501).' },
-        intent: { type: 'string', description: 'Canonical intent evaluated (CRYPTO_PRICE, TVL_LOOKUP, WEB_SEARCH).' },
+        intent: { type: 'string', description: 'Canonical intent evaluated (CRYPTO_PRICE, TVL_LOOKUP, WEB_SEARCH, FRAUD_RISK, CRYPTO_YIELD_RATE).' },
         answer: { type: 'string', description: 'Human-readable authoritative answer string.' },
+        summary: { type: 'string', description: 'Concise evaluation summary.' },
         confidence: { type: 'number', description: 'Calibrated confidence score between 0.0 and 1.0.' },
         confidence_score: { type: 'number', description: 'Backward-compatible confidence score field.' },
         price_usd: { type: ['number', 'null'], description: 'Spot price in USD for CRYPTO_PRICE queries.' },
         tvl_usd: { type: ['number', 'null'], description: 'Total value locked in USD for TVL queries.' },
         results: { type: 'array', description: 'Web search intelligence results.' },
+        verdict: { type: 'string', description: 'Fraud risk verdict assessment.' },
+        risk_score: { type: ['number', 'null'], description: 'Risk assessment score (0-100).' },
+        pool: { type: 'string', description: 'DeFi yield pool identifier.' },
+        venue: { type: 'string', description: 'DeFi yield venue or protocol.' },
+        apy: { type: ['number', 'null'], description: 'Annual percentage yield.' },
+        apy_bps: { type: ['integer', 'null'], description: 'APY in basis points.' },
         source: { type: 'string', description: 'Authoritative data source provider.' },
         timestamp: { type: 'string', description: 'ISO 8601 timestamp of response generation.' },
       },
@@ -90,7 +109,7 @@ export function generateDefaultSentinelYaml(hostUrl?: string, feeRecipient?: str
         label_field: 'answer',
         reason_field: 'answer',
       },
-      supported_intents: ['CRYPTO_PRICE', 'TVL_LOOKUP', 'WEB_SEARCH'],
+      supported_intents: ['CRYPTO_PRICE', 'TVL_LOOKUP', 'WEB_SEARCH', 'FRAUD_RISK', 'CRYPTO_YIELD_RATE'],
     },
   };
 }

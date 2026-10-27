@@ -44,6 +44,22 @@ endpoints:
       required_payload_keys:
         - query
 
+  - path: /api/v1/miner/fraud-risk
+    external_path: /api/v1/miner/fraud-risk
+    method: POST
+    description: Pre-flight fraud and drainer risk analysis engine evaluating addresses, transactions, and attack signatures.
+    telegraph_direct:
+      required_payload_keys:
+        - query
+
+  - path: /api/v1/miner/yield
+    external_path: /api/v1/miner/yield
+    method: POST
+    description: Real-time DeFi pool yield oracle reporting APY, basis points, and TVL across major protocols.
+    telegraph_direct:
+      required_payload_keys:
+        - pool
+
 input_schema:
   type: object
   properties:
@@ -74,6 +90,21 @@ input_schema:
     q:
       type: string
       description: Search query parameter alias.
+    address:
+      type: string
+      description: EVM or blockchain address for fraud risk evaluation (e.g. 0x...).
+    pool:
+      type: string
+      description: DeFi yield pool identifier or token symbol (e.g. stETH, USDC).
+    venue:
+      type: string
+      description: Protocol or venue name for yield lookups (e.g. lido, aave-v3).
+    description:
+      type: string
+      description: Narrative context or transaction description for fraud risk.
+    tx:
+      type: string
+      description: Transaction hash or identifier.
   required: []
 
 output_schema:
@@ -170,6 +201,40 @@ output_schema:
         - number
         - "null"
       description: Calculated risk score (0-100).
+    verdict:
+      type: string
+      description: Fraud risk classification verdict (High/Elevated/Low fraud risk).
+    risk_score:
+      type:
+        - number
+        - "null"
+      description: Fraud or security risk score (0-100).
+    risk_factors:
+      type: array
+      description: Specific risk factors or indicators detected.
+      items:
+        type: string
+    pool:
+      type: string
+      description: DeFi yield pool identifier or token symbol.
+    venue:
+      type: string
+      description: DeFi yield protocol or venue.
+    apy:
+      type:
+        - number
+        - "null"
+      description: Annual percentage yield.
+    apy_bps:
+      type:
+        - integer
+        - "null"
+      description: Annual percentage yield in basis points.
+    apr:
+      type:
+        - number
+        - "null"
+      description: Annual percentage rate.
     source:
       type: string
       description: Authoritative data source provider.
@@ -193,6 +258,8 @@ semantics:
     - CRYPTO_PRICE
     - TVL_LOOKUP
     - WEB_SEARCH
+    - FRAUD_RISK
+    - CRYPTO_YIELD_RATE
 
 on_chain:
   description: Autonomous DeFi risk intelligence and multi-oracle evaluation signals.

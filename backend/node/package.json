@@ -9,9 +9,11 @@
     "build": "tsc",
     "test": "tsx tests/gateway.test.ts",
     "test:crypto": "tsx tests/crypto_price.test.ts",
+    "test:fraud": "tsx tests/fraud_risk.test.ts",
     "test:tvl": "tsx tests/tvl.test.ts",
     "test:web-search": "tsx tests/web_search.test.ts",
-    "test:yaml": "tsx tests/yaml.test.ts"
+    "test:yaml": "tsx tests/yaml.test.ts",
+    "test:yield": "tsx tests/yield.test.ts"
   },
   "dependencies": {
     "@types/cors": "^2.8.17",

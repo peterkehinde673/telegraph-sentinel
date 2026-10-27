@@ -34,11 +34,17 @@ jobs:
       - name: Crypto price tests
         run: npm run test:crypto
 
+      - name: Fraud risk tests
+        run: npm run test:fraud
+
       - name: TVL tests
         run: npm run test:tvl
 
       - name: Web-search tests
         run: npm run test:web-search
+
+      - name: Crypto yield rate tests
+        run: npm run test:yield
 
       - name: Miner YAML validation
         run: npm run test:yaml
