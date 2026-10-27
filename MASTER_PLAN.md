@@ -17,7 +17,7 @@ This document serves as the canonical, frozen master plan for Telegraph Sentinel
 |---|---|---|---|
 | **Phase 1** | Baseline audit | **COMPLETE** | Full repo, CI, production endpoint audit, and protocol devnode catalog queries completed; baseline facts documented. Commit `eb34c77`, PR #24 passed all 5 CI checks. |
 | **Phase 2** | Canonical intent research | **COMPLETE** | Analyzed 134 intents across 1,922 miners; documented competition metrics; shortlisted `FRAUD_RISK` and `CRYPTO_YIELD_RATE`. Commit `1cd2d9a`, PR #25 passed all 5 CI checks. |
-| **Phase 3** | Adapt the reference miner YAML | **COMPLETE** | Adapted top-level input/output schemas, on-chain block, and signal mapping from reference YAML; preserved Sentinel identity (501); automated in `tests/yaml.test.ts` and CI. |
+| **Phase 3** | Adapt the reference miner YAML | **COMPLETE** | Adapted top-level input/output schemas, on-chain block, and signal mapping from reference YAML; preserved Sentinel identity (501); automated in `tests/yaml.test.ts` and CI. Commit `848e5b3`, PR #26 passed all 5 CI checks. |
 | **Phase 4** | Improve the original three intents | **NOT STARTED** | Enhance `CRYPTO_PRICE`, `TVL_LOOKUP`, and `WEB_SEARCH` handlers, schemas, error fallbacks, and test coverage. |
 | **Phase 5** | Implement additional verified intents | **NOT STARTED** | Implement and test verified low-competition canonical intents supported by Phase 2 research. |
 | **Phase 6** | Build and regression testing | **NOT STARTED** | Run test suites across node gateway, python engine, WASM scorer, and configuration validators. |
