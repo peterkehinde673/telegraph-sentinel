@@ -8,8 +8,8 @@ export interface TelegraphMinerSpec {
   metadata: { id: string; slug: string; name: string; description: string; version: string; author: string; repository: string; };
   network: { supportedChains: string[]; baseUrl: string; x402: { enabled: boolean; facilitatorUrl: string; defaultNetwork: string; pricingModel: string; floorPriceUsd: number; }; };
   intents: string[];
-  endpoints: Array<{ intent: string; path: string; method: 'GET' | 'POST'; description: string; requestParameters: Record<string, any>; responseSchema: Record<string, any>; telegraph_direct?: { required_payload_keys: string[] }; }>;
-  onchain: { feeRecipient: string; chainIdentifier: string; };
+  endpoints: Array<{ intent?: string; path: string; method: 'GET' | 'POST'; description: string; requestParameters?: Record<string, any>; responseSchema?: Record<string, any>; }>;
+  onchain?: { feeRecipient: string; chainIdentifier: string; };
   input_schema?: Record<string, any>;
   output_schema?: Record<string, any>;
   semantics?: {
@@ -35,31 +35,31 @@ export function generateDefaultSentinelYaml(hostUrl?: string, feeRecipient?: str
       {
         intent: 'CRYPTO_PRICE', path: '/api/v1/miner/risk-assessment', method: 'POST',
         description: 'Live cryptocurrency price and market intelligence oracle with real exchange fallbacks.',
-        requestParameters: { asset: { type: 'string', required: true, example: 'ETH' }, query: { type: 'string', required: false, example: 'What is the price of BTC?' } }, telegraph_direct: { required_payload_keys: ['asset'] },
+        requestParameters: { asset: { type: 'string', required: true, example: 'ETH' }, query: { type: 'string', required: false, example: 'What is the price of BTC?' } },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', asset: 'string', answer: 'string', price_usd: 'number|null', change_24h_pct: 'number|null', confidence_score: 'number' },
       },
       {
         intent: 'TVL_LOOKUP', path: '/api/v1/miner/tvl', method: 'POST',
         description: 'Real-time protocol TVL oracle backed by DefiLlama protocol data.',
-        requestParameters: { protocol: { type: 'string', required: true, example: 'Aave' }, query: { type: 'string', required: false, example: 'What is the TVL of Aave?' } }, telegraph_direct: { required_payload_keys: ['protocol'] },
+        requestParameters: { protocol: { type: 'string', required: true, example: 'Aave' }, query: { type: 'string', required: false, example: 'What is the TVL of Aave?' } },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', protocol: 'string', tvl_usd: 'number|null', tvl_7d_delta_pct: 'number|null', risk_signal: 'number|null', confidence_score: 'number' },
       },
       {
         intent: 'WEB_SEARCH', path: '/api/v1/miner/web-search', method: 'POST',
         description: 'Real-time web intelligence search backed by Gemini Google Search grounding with Tavily as a fallback.',
-        requestParameters: { query: { type: 'string', required: true, example: 'Latest security incidents affecting Aave' } }, telegraph_direct: { required_payload_keys: ['query'] },
+        requestParameters: { query: { type: 'string', required: true, example: 'Latest security incidents affecting Aave' } },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', query: 'string', answer: 'string', results: 'array', risk_signal: 'number', confidence_score: 'number' },
       },
       {
         intent: 'FRAUD_RISK', path: '/api/v1/miner/fraud-risk', method: 'POST',
         description: 'Autonomous pre-flight fraud and drainer risk analysis engine evaluating addresses, transactions, and attack signatures.',
-        requestParameters: { address: { type: 'string', required: false, example: '0xd90e2f925da726b50c4ed8d0fb90ad053324f31b' }, query: { type: 'string', required: false, example: 'Is this address safe?' } }, telegraph_direct: { required_payload_keys: ['query'] },
+        requestParameters: { address: { type: 'string', required: false, example: '0xd90e2f925da726b50c4ed8d0fb90ad053324f31b' }, query: { type: 'string', required: false, example: 'Is this address safe?' } },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', verdict: 'string', risk_score: 'number', confidence_score: 'number', summary: 'string' },
       },
       {
         intent: 'CRYPTO_YIELD_RATE', path: '/api/v1/miner/yield', method: 'POST',
         description: 'Real-time DeFi pool yield oracle reporting APY, basis points, and TVL across major protocols.',
-        requestParameters: { pool: { type: 'string', required: false, example: 'stETH' }, query: { type: 'string', required: false, example: 'What is Lido stETH APY?' } }, telegraph_direct: { required_payload_keys: ['pool'] },
+        requestParameters: { pool: { type: 'string', required: false, example: 'stETH' }, query: { type: 'string', required: false, example: 'What is Lido stETH APY?' } },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', pool: 'string', venue: 'string', apy: 'number', apy_bps: 'number', confidence_score: 'number', summary: 'string' },
       },
     ],
