@@ -187,8 +187,22 @@ export function evaluateFraudRisk(
     verdict = 'Low fraud risk';
   }
 
-  const factorsSummary = risk_factors.length > 0 ? ` Factors evaluated: ${risk_factors.join(', ')}.` : '';
-  const summary = `Sentinel evaluated fraud risk as "${verdict}" (score: ${finalRisk}/100, confidence: ${confidence.toFixed(2)}).${factorsSummary}`;
+  let explanation = '';
+  if (risk_factors.includes('OFAC_SANCTIONED_ENTITY') || risk_factors.includes('TORNADO_CASH_MIXER')) {
+    explanation = ' Identified sanctioned entity or privacy mixer contract with elevated money-laundering risk.';
+  } else if (risk_factors.some(f => f.startsWith('KNOWN_THREAT_'))) {
+    explanation = ' Address or entity matches known threat intelligence signature in security database.';
+  } else if (risk_factors.some(f => f.startsWith('ATTACK_INDICATOR_'))) {
+    explanation = ' Attack indicators detected matching wallet drainer, phishing or unauthorized approval patterns.';
+  } else if (risk_factors.includes('VERIFIED_SAFE_CANONICAL_PROTOCOL')) {
+    explanation = ' Address is a verified safe canonical DeFi protocol contract.';
+  } else if (risk_factors.includes('NULL_ADDRESS')) {
+    explanation = ' Zero or burn address target.';
+  } else {
+    explanation = risk_factors.length > 0 ? ` Factors evaluated: ${risk_factors.join(', ')}.` : ' Clean profile without detected malicious indicators.';
+  }
+
+  const summary = `${verdict}. Risk score: ${finalRisk}/100, confidence: ${confidence.toFixed(2)}.${explanation}`;
 
   return {
     verdict,
