@@ -54,17 +54,41 @@ async function runYamlTests() {
   console.log('   ✓ Programmatic spec is valid and serializable.');
 
   // Test 4: Endpoint and intent mapping verification
-  console.log('4. Verifying every declared intent has a mapped endpoint...');
-  const declaredIntents = parsedDoc.semantics?.supported_intents || parsedDoc.intents || [];
-  const endpointPaths = (parsedDoc.endpoints || []).map((e: any) => e.path);
+  console.log('4. Verifying every declared intent has a mapped endpoint with canonical intent naming...');
+  const declaredIntents: string[] = parsedDoc.semantics?.supported_intents || parsedDoc.intents || [];
+  const expectedCanonicalIntents = [
+    'CRYPTO_PRICE_USD',
+    'TVL_LOOKUP_GENERAL',
+    'WEB_SEARCH_GENERAL',
+    'FRAUD_RISK_GENERAL',
+    'CRYPTO_YIELD_RATE_GENERAL',
+  ];
 
-  if (declaredIntents.length < 3) {
-    throw new Error(`Expected at least 3 intents, got ${declaredIntents.length}`);
+  for (const expected of expectedCanonicalIntents) {
+    if (!declaredIntents.includes(expected)) {
+      throw new Error(`Expected canonical intent ${expected} missing from declared intents`);
+    }
   }
-  if (endpointPaths.length < 3) {
-    throw new Error(`Expected at least 3 endpoints, got ${endpointPaths.length}`);
+
+  const endpoints = parsedDoc.endpoints || [];
+  if (endpoints.length !== expectedCanonicalIntents.length) {
+    throw new Error(`Expected ${expectedCanonicalIntents.length} endpoints, got ${endpoints.length}`);
   }
-  console.log(`   ✓ All ${declaredIntents.length} intents mapped to endpoints.`);
+
+  for (const ep of endpoints) {
+    if (!ep.path || !ep.external_path) {
+      throw new Error(`Endpoint ${ep.path} missing required path or external_path`);
+    }
+    if (!Array.isArray(ep.intents) || ep.intents.length === 0) {
+      throw new Error(`Endpoint ${ep.path} missing required 'intents' list`);
+    }
+    for (const epIntent of ep.intents) {
+      if (!declaredIntents.includes(epIntent)) {
+        throw new Error(`Endpoint intent ${epIntent} not found in declared supported_intents`);
+      }
+    }
+  }
+  console.log(`   ✓ All ${declaredIntents.length} canonical intents verified with exact 1-to-1 endpoint mappings.`);
 
   console.log('--- All Telegraph Miner YAML Tests Passed! ---\n');
 }

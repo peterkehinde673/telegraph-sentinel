@@ -22,7 +22,7 @@ async function runTrack1Tests() {
   const regParams = {
     yamlHash: valResult.hashes.bytes32Hash,
     ipfsUri: `ipfs://${valResult.hashes.ipfsCidPlaceholder}`,
-    intents: ['CRYPTO_PRICE', 'TVL_LOOKUP', 'WEB_SEARCH'],
+    intents: ['CRYPTO_PRICE_USD', 'TVL_LOOKUP_GENERAL', 'WEB_SEARCH_GENERAL'],
     feeRecipient: '0x6811a9e33ce68fbdf6e07dfacab317072c287596',
     floorPriceUsd: 0.01,
   };

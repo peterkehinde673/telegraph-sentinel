@@ -3,7 +3,7 @@ import { calculateWebRisk, handleMinerWebSearch, searchWeb } from '../src/web_se
 import { generateDefaultSentinelYaml } from '../src/telegraph/yaml';
 
 const webSearchSpec = generateDefaultSentinelYaml().endpoints
-  .find((endpoint) => endpoint.intent === 'WEB_SEARCH');
+  .find((endpoint) => endpoint.intent === 'WEB_SEARCH_GENERAL' || endpoint.intent === 'WEB_SEARCH');
 if (!webSearchSpec?.description.includes('Gemini Google Search grounding')
   || !webSearchSpec.description.includes('Tavily as a fallback')) {
   throw new Error('WEB_SEARCH spec must describe its primary provider and fallback');

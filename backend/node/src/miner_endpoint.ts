@@ -311,12 +311,15 @@ export async function handleMinerRiskAssessment(req: Request, res: Response) {
 
   const nowIso = new Date().toISOString();
 
+  const requestedIntent = (req.body?.intent || req.query?.intent || '').toString().trim().toUpperCase();
+  const responseIntent = requestedIntent === 'CRYPTO_PRICE' ? 'CRYPTO_PRICE' : 'CRYPTO_PRICE_USD';
+
   if (!liveData) {
     const unavailableAnswer = `${asset} price data temporarily unavailable from upstream sources.`;
     res.status(200).json({
       status: 'unavailable',
       miner_id: 501,
-      intent: 'CRYPTO_PRICE',
+      intent: responseIntent,
       asset,
       answer: unavailableAnswer,
       summary: unavailableAnswer,
@@ -337,7 +340,7 @@ export async function handleMinerRiskAssessment(req: Request, res: Response) {
   res.status(200).json({
     status: 'success',
     miner_id: 501,
-    intent: 'CRYPTO_PRICE',
+    intent: responseIntent,
     asset,
     answer,
     summary: answer,

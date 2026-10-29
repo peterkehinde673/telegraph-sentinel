@@ -302,6 +302,8 @@ export async function handleMinerTvlLookup(req: Request, res: Response) {
     || 'Aave';
 
   const nowIso = new Date().toISOString();
+  const requestedIntent = (req.body?.intent || req.query?.intent || '').toString().trim().toUpperCase();
+  const responseIntent = requestedIntent === 'TVL_LOOKUP' ? 'TVL_LOOKUP' : 'TVL_LOOKUP_GENERAL';
 
   // If explicit chain query or raw input matches a known chain alias
   const normalizedRaw = String(rawInput).toLowerCase().trim();
@@ -316,7 +318,7 @@ export async function handleMinerTvlLookup(req: Request, res: Response) {
       res.status(200).json({
         status: 'success',
         miner_id: 501,
-        intent: 'TVL_LOOKUP',
+        intent: responseIntent,
         kind: 'chain',
         chain: chainData.name,
         chain_id: chainData.chainId,
@@ -341,7 +343,7 @@ export async function handleMinerTvlLookup(req: Request, res: Response) {
     res.status(503).json({
       status: 'unavailable',
       miner_id: 501,
-      intent: 'TVL_LOOKUP',
+      intent: responseIntent,
       protocol: protocolSlug,
       answer: unavailableAnswer,
       summary: unavailableAnswer,
@@ -368,7 +370,7 @@ export async function handleMinerTvlLookup(req: Request, res: Response) {
   res.status(200).json({
     status: 'success',
     miner_id: 501,
-    intent: 'TVL_LOOKUP',
+    intent: responseIntent,
     kind: 'protocol',
     protocol: liveData.protocol,
     protocol_slug: liveData.protocol_slug,

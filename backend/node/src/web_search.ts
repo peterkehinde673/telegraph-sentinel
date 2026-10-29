@@ -335,9 +335,11 @@ export async function handleMinerWebSearch(req: Request, res: Response) {
 
   const query = normalizeQuery(rawQuery);
   const nowIso = new Date().toISOString();
+  const requestedIntent = (req.body?.intent || req.query?.intent || '').toString().trim().toUpperCase();
+  const responseIntent = requestedIntent === 'WEB_SEARCH' ? 'WEB_SEARCH' : 'WEB_SEARCH_GENERAL';
 
   if (!query) {
-    res.status(400).json({ status: 'error', miner_id: 501, intent: 'WEB_SEARCH', error: 'A search query is required.' });
+    res.status(400).json({ status: 'error', miner_id: 501, intent: responseIntent, error: 'A search query is required.' });
     return;
   }
 
@@ -346,7 +348,7 @@ export async function handleMinerWebSearch(req: Request, res: Response) {
     res.status(503).json({
       status: 'unavailable',
       miner_id: 501,
-      intent: 'WEB_SEARCH',
+      intent: responseIntent,
       query,
       answer: unconfAnswer,
       summary: unconfAnswer,
@@ -367,7 +369,7 @@ export async function handleMinerWebSearch(req: Request, res: Response) {
     res.status(200).json({
       status: 'unavailable',
       miner_id: 501,
-      intent: 'WEB_SEARCH',
+      intent: responseIntent,
       query,
       answer: unavAnswer,
       summary: unavAnswer,
@@ -387,7 +389,7 @@ export async function handleMinerWebSearch(req: Request, res: Response) {
   res.status(200).json({
     status: 'success',
     miner_id: 501,
-    intent: 'WEB_SEARCH',
+    intent: responseIntent,
     query: liveData.query,
     answer: liveData.answer,
     summary: liveData.answer,

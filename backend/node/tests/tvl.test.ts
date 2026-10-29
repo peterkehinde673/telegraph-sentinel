@@ -4,7 +4,7 @@ import { generateDefaultSentinelYaml } from '../src/telegraph/yaml';
 
 async function runHandlerTests() {
   const tvlResponseSchema = generateDefaultSentinelYaml().endpoints
-    .find((endpoint) => endpoint.intent === 'TVL_LOOKUP')?.responseSchema;
+    .find((endpoint) => endpoint.intent === 'TVL_LOOKUP_GENERAL' || endpoint.intent === 'TVL_LOOKUP')?.responseSchema;
   if (tvlResponseSchema?.risk_signal !== 'number|null') {
     throw new Error('TVL response schema must allow a missing risk estimate');
   }

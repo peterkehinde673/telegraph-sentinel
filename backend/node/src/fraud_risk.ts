@@ -9,7 +9,7 @@ export type FraudVerdict =
 export interface FraudRiskResult {
   status: 'success' | 'unavailable';
   miner_id: 501;
-  intent: 'FRAUD_RISK';
+  intent: string;
   verdict: FraudVerdict;
   risk_score: number;
   confidence: number;
@@ -234,12 +234,16 @@ export async function handleMinerFraudRisk(req: Request, res: Response): Promise
     || '';
 
   const nowIso = new Date().toISOString();
+  const requestedIntent = (req.body?.intent || req.query?.intent || '').toString().trim().toUpperCase();
+  const responseIntent = (requestedIntent === 'FRAUD_RISK' || requestedIntent === 'FRAUD_DETECTION_GENERAL')
+    ? requestedIntent
+    : 'FRAUD_RISK_GENERAL';
   const assessment = evaluateFraudRisk(rawInput, typeof rawAddress === 'string' ? rawAddress : null);
 
   const responsePayload: FraudRiskResult = {
     status: assessment.verdict === 'Insufficient information' ? 'unavailable' : 'success',
     miner_id: 501,
-    intent: 'FRAUD_RISK',
+    intent: responseIntent,
     verdict: assessment.verdict,
     risk_score: assessment.risk_score,
     confidence: assessment.confidence,
