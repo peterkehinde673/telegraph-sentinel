@@ -303,7 +303,7 @@ export async function handleMinerTvlLookup(req: Request, res: Response) {
 
   const nowIso = new Date().toISOString();
   const requestedIntent = (req.body?.intent || req.query?.intent || '').toString().trim().toUpperCase();
-  const responseIntent = requestedIntent === 'TVL_LOOKUP' ? 'TVL_LOOKUP' : 'TVL_LOOKUP_GENERAL';
+  const responseIntent = requestedIntent === 'TVL_LOOKUP_GENERAL' ? 'TVL_LOOKUP_GENERAL' : 'TVL_LOOKUP';
 
   // If explicit chain query or raw input matches a known chain alias
   const normalizedRaw = String(rawInput).toLowerCase().trim();

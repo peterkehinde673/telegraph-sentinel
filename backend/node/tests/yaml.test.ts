@@ -57,11 +57,11 @@ async function runYamlTests() {
   console.log('4. Verifying every declared intent has a mapped endpoint with canonical intent naming...');
   const declaredIntents: string[] = parsedDoc.semantics?.supported_intents || parsedDoc.intents || [];
   const expectedCanonicalIntents = [
-    'CRYPTO_PRICE_USD',
-    'TVL_LOOKUP_GENERAL',
-    'WEB_SEARCH_GENERAL',
-    'FRAUD_RISK_GENERAL',
-    'CRYPTO_YIELD_RATE_GENERAL',
+    'CRYPTO_PRICE',
+    'TVL_LOOKUP',
+    'WEB_SEARCH',
+    'FRAUD_RISK',
+    'CRYPTO_YIELD_RATE',
   ];
 
   for (const expected of expectedCanonicalIntents) {

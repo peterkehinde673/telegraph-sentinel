@@ -23,37 +23,37 @@ endpoints:
   - path: /api/v1/miner/risk-assessment
     external_path: /api/v1/miner/risk-assessment
     method: POST
-    description: CRYPTO_PRICE_USD. Real-time cryptocurrency spot price and market valuation oracle with multi-exchange fallback verification.
+    description: CRYPTO_PRICE. Real-time cryptocurrency spot price and market valuation oracle with multi-exchange fallback verification.
     intents:
-      - CRYPTO_PRICE_USD
+      - CRYPTO_PRICE
 
   - path: /api/v1/miner/tvl
     external_path: /api/v1/miner/tvl
     method: POST
-    description: TVL_LOOKUP_GENERAL. Real-time protocol and chain Total Value Locked (TVL) intelligence oracle backed by DefiLlama data.
+    description: TVL_LOOKUP. Real-time protocol and chain Total Value Locked (TVL) intelligence oracle backed by DefiLlama data.
     intents:
-      - TVL_LOOKUP_GENERAL
+      - TVL_LOOKUP
 
   - path: /api/v1/miner/web-search
     external_path: /api/v1/miner/web-search
     method: POST
-    description: WEB_SEARCH_GENERAL. Real-time web intelligence and security event search engine powered by live grounding and web feeds.
+    description: WEB_SEARCH. Real-time web intelligence and security event search engine powered by live grounding and web feeds.
     intents:
-      - WEB_SEARCH_GENERAL
+      - WEB_SEARCH
 
   - path: /api/v1/miner/fraud-risk
     external_path: /api/v1/miner/fraud-risk
     method: POST
-    description: FRAUD_RISK_GENERAL. Pre-flight fraud risk assessment engine scoring addresses, transactions, contracts, and threat signatures.
+    description: FRAUD_RISK. Pre-flight fraud risk assessment engine scoring addresses, transactions, contracts, and threat signatures.
     intents:
-      - FRAUD_RISK_GENERAL
+      - FRAUD_RISK
 
   - path: /api/v1/miner/yield
     external_path: /api/v1/miner/yield
     method: POST
-    description: CRYPTO_YIELD_RATE_GENERAL. Real-time DeFi yield rate oracle reporting APY, APR, and basis points across major liquidity pools.
+    description: CRYPTO_YIELD_RATE. Real-time DeFi yield rate oracle reporting APY, APR, and basis points across major liquidity pools.
     intents:
-      - CRYPTO_YIELD_RATE_GENERAL
+      - CRYPTO_YIELD_RATE
 
 input_schema:
   type: object
@@ -113,7 +113,7 @@ output_schema:
       description: Registered Telegraph miner identifier (501).
     intent:
       type: string
-      description: Canonical intent evaluated (CRYPTO_PRICE_USD, TVL_LOOKUP_GENERAL, WEB_SEARCH_GENERAL, FRAUD_RISK_GENERAL, CRYPTO_YIELD_RATE_GENERAL).
+      description: Canonical intent evaluated (CRYPTO_PRICE, TVL_LOOKUP, WEB_SEARCH, FRAUD_RISK, CRYPTO_YIELD_RATE).
     answer:
       type: string
       description: Human-readable authoritative answer string.
@@ -250,11 +250,11 @@ semantics:
     label_field: answer
     reason_field: answer
   supported_intents:
-    - CRYPTO_PRICE_USD
-    - TVL_LOOKUP_GENERAL
-    - WEB_SEARCH_GENERAL
-    - FRAUD_RISK_GENERAL
-    - CRYPTO_YIELD_RATE_GENERAL
+    - CRYPTO_PRICE
+    - TVL_LOOKUP
+    - WEB_SEARCH
+    - FRAUD_RISK
+    - CRYPTO_YIELD_RATE
 
 on_chain:
   description: Autonomous DeFi risk intelligence and multi-oracle evaluation signals.

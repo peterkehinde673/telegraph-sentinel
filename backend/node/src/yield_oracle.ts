@@ -250,7 +250,7 @@ export async function handleMinerYieldRate(req: Request, res: Response): Promise
 
   const nowIso = new Date().toISOString();
   const requestedIntent = (req.body?.intent || req.query?.intent || '').toString().trim().toUpperCase();
-  const responseIntent = requestedIntent === 'CRYPTO_YIELD_RATE' ? 'CRYPTO_YIELD_RATE' : 'CRYPTO_YIELD_RATE_GENERAL';
+  const responseIntent = requestedIntent === 'CRYPTO_YIELD_RATE_GENERAL' ? 'CRYPTO_YIELD_RATE_GENERAL' : 'CRYPTO_YIELD_RATE';
 
   if (!matchResult) {
     const unavAnswer = `Yield rate data temporarily unavailable for "${rawInput}".`;

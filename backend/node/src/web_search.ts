@@ -336,7 +336,7 @@ export async function handleMinerWebSearch(req: Request, res: Response) {
   const query = normalizeQuery(rawQuery);
   const nowIso = new Date().toISOString();
   const requestedIntent = (req.body?.intent || req.query?.intent || '').toString().trim().toUpperCase();
-  const responseIntent = requestedIntent === 'WEB_SEARCH' ? 'WEB_SEARCH' : 'WEB_SEARCH_GENERAL';
+  const responseIntent = requestedIntent === 'WEB_SEARCH_GENERAL' ? 'WEB_SEARCH_GENERAL' : 'WEB_SEARCH';
 
   if (!query) {
     res.status(400).json({ status: 'error', miner_id: 501, intent: responseIntent, error: 'A search query is required.' });
