@@ -8,7 +8,16 @@ export interface TelegraphMinerSpec {
   metadata: { id: string; slug: string; name: string; description: string; version: string; author: string; repository: string; };
   network: { supportedChains: string[]; baseUrl: string; x402: { enabled: boolean; facilitatorUrl: string; defaultNetwork: string; pricingModel: string; floorPriceUsd: number; }; };
   intents: string[];
-  endpoints: Array<{ intent?: string; path: string; method: 'GET' | 'POST'; description: string; requestParameters?: Record<string, any>; responseSchema?: Record<string, any>; }>;
+  endpoints: Array<{
+    intent?: string;
+    intents?: string[];
+    path: string;
+    external_path?: string;
+    method: 'GET' | 'POST';
+    description: string;
+    requestParameters?: Record<string, any>;
+    responseSchema?: Record<string, any>;
+  }>;
   onchain?: { feeRecipient: string; chainIdentifier: string; };
   input_schema?: Record<string, any>;
   output_schema?: Record<string, any>;
@@ -30,35 +39,55 @@ export function generateDefaultSentinelYaml(hostUrl?: string, feeRecipient?: str
       supportedChains: ['eip155:84532', 'eip155:8453'], baseUrl: base,
       x402: { enabled: true, facilitatorUrl: config.x402.facilitatorUrl, defaultNetwork: config.telegraph.network, pricingModel: 'x402-per-request', floorPriceUsd: 0.001 },
     },
-    intents: ['CRYPTO_PRICE', 'TVL_LOOKUP', 'WEB_SEARCH', 'FRAUD_RISK', 'CRYPTO_YIELD_RATE'],
+    intents: ['CRYPTO_PRICE_USD', 'TVL_LOOKUP_GENERAL', 'WEB_SEARCH_GENERAL', 'FRAUD_RISK_GENERAL', 'CRYPTO_YIELD_RATE_GENERAL'],
     endpoints: [
       {
-        intent: 'CRYPTO_PRICE', path: '/api/v1/miner/risk-assessment', method: 'POST',
-        description: 'Live cryptocurrency price and market intelligence oracle with real exchange fallbacks.',
+        intent: 'CRYPTO_PRICE_USD',
+        intents: ['CRYPTO_PRICE_USD'],
+        path: '/api/v1/miner/risk-assessment',
+        external_path: '/api/v1/miner/risk-assessment',
+        method: 'POST',
+        description: 'CRYPTO_PRICE_USD. Live cryptocurrency price and market intelligence oracle with real exchange fallbacks.',
         requestParameters: { asset: { type: 'string', required: true, example: 'ETH' }, query: { type: 'string', required: false, example: 'What is the price of BTC?' } },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', asset: 'string', answer: 'string', price_usd: 'number|null', change_24h_pct: 'number|null', confidence_score: 'number' },
       },
       {
-        intent: 'TVL_LOOKUP', path: '/api/v1/miner/tvl', method: 'POST',
-        description: 'Real-time protocol TVL oracle backed by DefiLlama protocol data.',
+        intent: 'TVL_LOOKUP_GENERAL',
+        intents: ['TVL_LOOKUP_GENERAL'],
+        path: '/api/v1/miner/tvl',
+        external_path: '/api/v1/miner/tvl',
+        method: 'POST',
+        description: 'TVL_LOOKUP_GENERAL. Real-time protocol TVL oracle backed by DefiLlama protocol data.',
         requestParameters: { protocol: { type: 'string', required: true, example: 'Aave' }, query: { type: 'string', required: false, example: 'What is the TVL of Aave?' } },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', protocol: 'string', tvl_usd: 'number|null', tvl_7d_delta_pct: 'number|null', risk_signal: 'number|null', confidence_score: 'number' },
       },
       {
-        intent: 'WEB_SEARCH', path: '/api/v1/miner/web-search', method: 'POST',
-        description: 'Real-time web intelligence search backed by Gemini Google Search grounding with Tavily as a fallback.',
+        intent: 'WEB_SEARCH_GENERAL',
+        intents: ['WEB_SEARCH_GENERAL'],
+        path: '/api/v1/miner/web-search',
+        external_path: '/api/v1/miner/web-search',
+        method: 'POST',
+        description: 'WEB_SEARCH_GENERAL. Real-time web intelligence search backed by Gemini Google Search grounding with Tavily as a fallback.',
         requestParameters: { query: { type: 'string', required: true, example: 'Latest security incidents affecting Aave' } },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', query: 'string', answer: 'string', results: 'array', risk_signal: 'number', confidence_score: 'number' },
       },
       {
-        intent: 'FRAUD_RISK', path: '/api/v1/miner/fraud-risk', method: 'POST',
-        description: 'Autonomous pre-flight fraud and drainer risk analysis engine evaluating addresses, transactions, and attack signatures.',
+        intent: 'FRAUD_RISK_GENERAL',
+        intents: ['FRAUD_RISK_GENERAL'],
+        path: '/api/v1/miner/fraud-risk',
+        external_path: '/api/v1/miner/fraud-risk',
+        method: 'POST',
+        description: 'FRAUD_RISK_GENERAL. Autonomous pre-flight fraud and drainer risk analysis engine evaluating addresses, transactions, and attack signatures.',
         requestParameters: { address: { type: 'string', required: false, example: '0xd90e2f925da726b50c4ed8d0fb90ad053324f31b' }, query: { type: 'string', required: false, example: 'Is this address safe?' } },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', verdict: 'string', risk_score: 'number', confidence_score: 'number', summary: 'string' },
       },
       {
-        intent: 'CRYPTO_YIELD_RATE', path: '/api/v1/miner/yield', method: 'POST',
-        description: 'Real-time DeFi pool yield oracle reporting APY, basis points, and TVL across major protocols.',
+        intent: 'CRYPTO_YIELD_RATE_GENERAL',
+        intents: ['CRYPTO_YIELD_RATE_GENERAL'],
+        path: '/api/v1/miner/yield',
+        external_path: '/api/v1/miner/yield',
+        method: 'POST',
+        description: 'CRYPTO_YIELD_RATE_GENERAL. Real-time DeFi pool yield oracle reporting APY, basis points, and TVL across major protocols.',
         requestParameters: { pool: { type: 'string', required: false, example: 'stETH' }, query: { type: 'string', required: false, example: 'What is Lido stETH APY?' } },
         responseSchema: { status: 'string', miner_id: 'number', intent: 'string', pool: 'string', venue: 'string', apy: 'number', apy_bps: 'number', confidence_score: 'number', summary: 'string' },
       },
@@ -84,7 +113,7 @@ export function generateDefaultSentinelYaml(hostUrl?: string, feeRecipient?: str
       properties: {
         status: { type: 'string', description: 'Status of the response (success, unavailable, error).' },
         miner_id: { type: 'integer', description: 'Registered Telegraph miner identifier (501).' },
-        intent: { type: 'string', description: 'Canonical intent evaluated (CRYPTO_PRICE, TVL_LOOKUP, WEB_SEARCH, FRAUD_RISK, CRYPTO_YIELD_RATE).' },
+        intent: { type: 'string', description: 'Canonical intent evaluated (CRYPTO_PRICE_USD, TVL_LOOKUP_GENERAL, WEB_SEARCH_GENERAL, FRAUD_RISK_GENERAL, CRYPTO_YIELD_RATE_GENERAL).' },
         answer: { type: 'string', description: 'Human-readable authoritative answer string.' },
         summary: { type: 'string', description: 'Concise evaluation summary.' },
         confidence: { type: 'number', description: 'Calibrated confidence score between 0.0 and 1.0.' },
@@ -109,7 +138,7 @@ export function generateDefaultSentinelYaml(hostUrl?: string, feeRecipient?: str
         label_field: 'answer',
         reason_field: 'answer',
       },
-      supported_intents: ['CRYPTO_PRICE', 'TVL_LOOKUP', 'WEB_SEARCH', 'FRAUD_RISK', 'CRYPTO_YIELD_RATE'],
+      supported_intents: ['CRYPTO_PRICE_USD', 'TVL_LOOKUP_GENERAL', 'WEB_SEARCH_GENERAL', 'FRAUD_RISK_GENERAL', 'CRYPTO_YIELD_RATE_GENERAL'],
     },
   };
 }
